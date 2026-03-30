@@ -10,10 +10,26 @@
   <header class="header">
     <h1>Asset register</h1>
     <p class="sub">Inventory aligned with ISO/IEC 27001 asset management — owners, assignments, audit trail, Excel export.</p>
-    <a class="btn secondary" href="/api/export/assets.xlsx">Export inventory to Excel</a>
+    <div id="auth-bar" class="auth-bar hidden">
+      <span id="auth-user"></span>
+      <button id="logout-btn" type="button" class="btn secondary">Logout</button>
+      <a class="btn secondary" href="/api/export/assets.xlsx">Export inventory to Excel</a>
+    </div>
   </header>
 
-  <main class="layout">
+  <main id="login-view" class="layout">
+    <section class="card auth-card">
+      <h2>Login</h2>
+      <form id="login-form" class="form-grid">
+        <label>Username<input name="username" required /></label>
+        <label>Password<input name="password" type="password" required /></label>
+        <button type="submit" class="btn">Sign in</button>
+      </form>
+      <p class="hint">Default credentials: <code>admin</code> / <code>ChangeMe123!</code>. Change this immediately in production.</p>
+    </section>
+  </main>
+
+  <main id="app-view" class="layout hidden">
     <section class="card">
       <h2>Users</h2>
       <form id="user-form" class="form-grid">

@@ -1,13 +1,101 @@
 const express = require('express');
 const path = require('path');
+const cookieParser = require('cookie-parser');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const ExcelJS = require('exceljs');
 const { db, insertAuditTrail } = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const AUTH_COOKIE = 'asset_register_auth';
+const AUTH_SECRET = process.env.AUTH_SECRET || 'replace-this-in-production';
+const DEFAULT_ADMIN_USERNAME = process.env.DEFAULT_ADMIN_USERNAME || 'admin';
+const DEFAULT_ADMIN_PASSWORD = process.env.DEFAULT_ADMIN_PASSWORD || 'ChangeMe123!';
 
 app.use(express.json());
+app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
+
+function ensureDefaultAuthUser() {
+  const existing = db.prepare('SELECT id FROM auth_users LIMIT 1').get();
+  if (existing) return;
+  const passwordHash = bcrypt.hashSync(DEFAULT_ADMIN_PASSWORD, 10);
+  db.prepare('INSERT INTO auth_users (username, password_hash, role) VALUES (?, ?, ?)').run(
+    DEFAULT_ADMIN_USERNAME,
+    passwordHash,
+    'admin'
+  );
+  console.log(
+    `[auth] Created default admin user "${DEFAULT_ADMIN_USERNAME}". Change password immediately.`
+  );
+}
+
+function authCookieOptions() {
+  return {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 1000 * 60 * 60 * 12,
+  };
+}
+
+function requireAuth(req, res, next) {
+  const token = req.cookies?.[AUTH_COOKIE];
+  if (!token) return res.status(401).json({ error: 'authentication required' });
+  try {
+    const payload = jwt.verify(token, AUTH_SECRET);
+    req.authUser = payload;
+    return next();
+  } catch (_e) {
+    return res.status(401).json({ error: 'invalid session' });
+  }
+}
+
+app.post('/api/auth/login', (req, res) => {
+  const username = String(req.body?.username || '').trim();
+  const password = String(req.body?.password || '');
+  if (!username || !password) {
+    return res.status(400).json({ error: 'username and password are required' });
+  }
+
+  const user = db.prepare('SELECT * FROM auth_users WHERE username = ?').get(username);
+  if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+    return res.status(401).json({ error: 'invalid credentials' });
+  }
+
+  const token = jwt.sign(
+    { sub: user.id, username: user.username, role: user.role },
+    AUTH_SECRET,
+    { expiresIn: '12h' }
+  );
+  res.cookie(AUTH_COOKIE, token, authCookieOptions());
+  res.json({ ok: true, user: { id: user.id, username: user.username, role: user.role } });
+});
+
+app.post('/api/auth/logout', (_req, res) => {
+  res.clearCookie(AUTH_COOKIE, authCookieOptions());
+  res.json({ ok: true });
+});
+
+app.get('/api/auth/session', (req, res) => {
+  const token = req.cookies?.[AUTH_COOKIE];
+  if (!token) return res.status(401).json({ error: 'not authenticated' });
+  try {
+    const payload = jwt.verify(token, AUTH_SECRET);
+    return res.json({
+      authenticated: true,
+      user: { id: payload.sub, username: payload.username, role: payload.role },
+    });
+  } catch (_e) {
+    return res.status(401).json({ error: 'invalid session' });
+  }
+});
+
+app.use('/api', (req, res, next) => {
+  if (req.path.startsWith('/auth/')) return next();
+  return requireAuth(req, res, next);
+});
 
 function rowToAssetPayload(row) {
   if (!row) return null;
@@ -194,6 +282,7 @@ app.patch('/api/assets/:id', (req, res) => {
       action_type: 'UPDATE',
       previous_value: JSON.stringify(rowToAssetPayload(prev)),
       new_value: JSON.stringify(rowToAssetPayload(updated)),
+      changed_by: req.authUser?.username || 'system',
     });
   });
 
@@ -218,6 +307,7 @@ app.delete('/api/assets/:id', (req, res) => {
       action_type: 'DELETE',
       previous_value: JSON.stringify(rowToAssetPayload(prev)),
       new_value: null,
+      changed_by: req.authUser?.username || 'system',
     });
     db.prepare('DELETE FROM assets WHERE id = ?').run(id);
   });
@@ -294,5 +384,6 @@ app.use((err, _req, res, _next) => {
 });
 
 app.listen(PORT, () => {
+  ensureDefaultAuthUser();
   console.log(`Asset register listening at http://localhost:${PORT}`);
 });

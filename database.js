@@ -50,6 +50,14 @@ function initSchema() {
 
     CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_trail(entity_table, entity_id);
     CREATE INDEX IF NOT EXISTS idx_audit_time ON audit_trail(timestamp);
+
+    CREATE TABLE IF NOT EXISTS auth_users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'admin',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 }
 

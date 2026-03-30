@@ -46,6 +46,20 @@ body {
   max-width: 1200px;
 }
 
+.hidden {
+  display: none;
+}
+
+.auth-bar {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.auth-card {
+  max-width: 520px;
+}
+
 .card {
   background: var(--surface);
   border: 1px solid var(--border);

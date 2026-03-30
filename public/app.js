@@ -10,6 +10,10 @@ async function fetchJSON(url, opts) {
     data = text;
   }
   if (!res.ok) {
+    if (res.status === 401) {
+      showLogin();
+      throw new Error('Please login first');
+    }
     const msg = data?.error || res.statusText || 'Request failed';
     throw new Error(msg);
   }
@@ -17,6 +21,22 @@ async function fetchJSON(url, opts) {
 }
 
 let users = [];
+let activeUser = null;
+
+function showLogin() {
+  $('#login-view').classList.remove('hidden');
+  $('#app-view').classList.add('hidden');
+  $('#auth-bar').classList.add('hidden');
+  $('#auth-user').textContent = '';
+}
+
+function showApp(user) {
+  activeUser = user;
+  $('#login-view').classList.add('hidden');
+  $('#app-view').classList.remove('hidden');
+  $('#auth-bar').classList.remove('hidden');
+  $('#auth-user').textContent = `Logged in as ${user.username}`;
+}
 
 function userOptionsHtml(selectedId, includeEmpty = true) {
   let html = includeEmpty ? '<option value="">— none —</option>' : '';
@@ -100,6 +120,36 @@ async function refresh() {
   await loadAssets();
   await loadAudit();
 }
+
+$('#login-form').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const fd = new FormData(ev.target);
+  try {
+    const data = await fetchJSON('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: fd.get('username'),
+        password: fd.get('password'),
+      }),
+    });
+    showApp(data.user);
+    ev.target.reset();
+    await refresh();
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
+$('#logout-btn').addEventListener('click', async () => {
+  try {
+    await fetchJSON('/api/auth/logout', { method: 'POST' });
+  } catch (_e) {
+    /* ignore */
+  }
+  activeUser = null;
+  showLogin();
+});
 
 $('#user-form').addEventListener('submit', async (ev) => {
   ev.preventDefault();
@@ -190,4 +240,14 @@ async function onDeleteAsset(ev) {
   }
 }
 
-refresh().catch((e) => console.error(e));
+async function bootstrap() {
+  try {
+    const session = await fetchJSON('/api/auth/session');
+    showApp(session.user);
+    await refresh();
+  } catch (_e) {
+    showLogin();
+  }
+}
+
+bootstrap().catch((e) => console.error(e));
