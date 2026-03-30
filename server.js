@@ -130,6 +130,21 @@ function assetExistsByTag(tag, excludeId) {
   return !!row;
 }
 
+function getLaptopById(id) {
+  return db.prepare('SELECT * FROM laptops WHERE id = ?').get(id);
+}
+
+function laptopExistsByServiceTag(tag, excludeId) {
+  if (excludeId != null) {
+    const row = db
+      .prepare('SELECT id FROM laptops WHERE service_tag = ? AND id != ?')
+      .get(tag, excludeId);
+    return !!row;
+  }
+  const row = db.prepare('SELECT id FROM laptops WHERE service_tag = ?').get(tag);
+  return !!row;
+}
+
 // --- Users ---
 app.get('/api/users', (_req, res) => {
   const users = db.prepare('SELECT * FROM users ORDER BY name').all();
@@ -315,15 +330,169 @@ app.delete('/api/assets/:id', (req, res) => {
   res.status(204).send();
 });
 
+// --- Laptop Register ---
+app.get('/api/laptops', (_req, res) => {
+  const rows = db.prepare('SELECT * FROM laptops ORDER BY service_tag').all();
+  res.json(rows);
+});
+
+app.post('/api/laptops', (req, res) => {
+  const body = req.body || {};
+  const serviceTag = String(body.service_tag || '').trim();
+  if (!serviceTag) {
+    return res.status(400).json({ error: 'service_tag is required' });
+  }
+  if (laptopExistsByServiceTag(serviceTag)) {
+    return res.status(409).json({ error: 'service_tag must be unique' });
+  }
+
+  const insert = db.prepare(`
+    INSERT INTO laptops (
+      asset_type, asset_manufacturer, service_tag, model, p_n, asset_owner, assigned_to,
+      asset_status, last_owner, dept, location, asset_health, warranty, install_date,
+      date_added_updated, processor, ram, harddisk, o_s, supt_vendor, keyboard, mouse,
+      headphone, usb_extender, contains_pii
+    ) VALUES (
+      @asset_type, @asset_manufacturer, @service_tag, @model, @p_n, @asset_owner, @assigned_to,
+      @asset_status, @last_owner, @dept, @location, @asset_health, @warranty, @install_date,
+      @date_added_updated, @processor, @ram, @harddisk, @o_s, @supt_vendor, @keyboard, @mouse,
+      @headphone, @usb_extender, @contains_pii
+    )
+  `);
+
+  const payload = {
+    asset_type: body.asset_type ?? null,
+    asset_manufacturer: body.asset_manufacturer ?? null,
+    service_tag: serviceTag,
+    model: body.model ?? null,
+    p_n: body.p_n ?? null,
+    asset_owner: body.asset_owner ?? null,
+    assigned_to: body.assigned_to ?? null,
+    asset_status: body.asset_status ?? null,
+    last_owner: body.last_owner ?? null,
+    dept: body.dept ?? null,
+    location: body.location ?? null,
+    asset_health: body.asset_health ?? null,
+    warranty: body.warranty ?? null,
+    install_date: body.install_date ?? null,
+    date_added_updated: body.date_added_updated ?? null,
+    processor: body.processor ?? null,
+    ram: body.ram ?? null,
+    harddisk: body.harddisk ?? null,
+    o_s: body.o_s ?? null,
+    supt_vendor: body.supt_vendor ?? null,
+    keyboard: body.keyboard ?? null,
+    mouse: body.mouse ?? null,
+    headphone: body.headphone ?? null,
+    usb_extender: body.usb_extender ?? null,
+    contains_pii: body.contains_pii ?? null,
+  };
+
+  const info = insert.run(payload);
+  res.status(201).json(getLaptopById(info.lastInsertRowid));
+});
+
+app.patch('/api/laptops/:id', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: 'invalid id' });
+  }
+  const prev = getLaptopById(id);
+  if (!prev) {
+    return res.status(404).json({ error: 'laptop not found' });
+  }
+
+  const allowed = [
+    'asset_type',
+    'asset_manufacturer',
+    'service_tag',
+    'model',
+    'p_n',
+    'asset_owner',
+    'assigned_to',
+    'asset_status',
+    'last_owner',
+    'dept',
+    'location',
+    'asset_health',
+    'warranty',
+    'install_date',
+    'date_added_updated',
+    'processor',
+    'ram',
+    'harddisk',
+    'o_s',
+    'supt_vendor',
+    'keyboard',
+    'mouse',
+    'headphone',
+    'usb_extender',
+    'contains_pii',
+  ];
+  const patch = {};
+  for (const key of allowed) {
+    if (Object.prototype.hasOwnProperty.call(req.body, key)) patch[key] = req.body[key];
+  }
+  if (patch.service_tag !== undefined) {
+    patch.service_tag = String(patch.service_tag || '').trim();
+    if (!patch.service_tag) return res.status(400).json({ error: 'service_tag cannot be empty' });
+    if (laptopExistsByServiceTag(patch.service_tag, id)) {
+      return res.status(409).json({ error: 'service_tag must be unique' });
+    }
+  }
+  if (Object.keys(patch).length === 0) {
+    return res.status(400).json({ error: 'no updatable fields provided' });
+  }
+
+  const sets = Object.keys(patch)
+    .map((k) => `${k} = @${k}`)
+    .concat(["updated_at = datetime('now')"])
+    .join(', ');
+  const tx = db.transaction(() => {
+    db.prepare(`UPDATE laptops SET ${sets} WHERE id = @id`).run({ ...patch, id });
+    insertAuditTrail({
+      entity_table: 'laptops',
+      entity_id: id,
+      action_type: 'UPDATE',
+      previous_value: JSON.stringify(prev),
+      new_value: JSON.stringify(getLaptopById(id)),
+      changed_by: req.authUser?.username || 'system',
+    });
+  });
+  tx();
+  res.json(getLaptopById(id));
+});
+
+app.delete('/api/laptops/:id', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: 'invalid id' });
+  }
+  const prev = getLaptopById(id);
+  if (!prev) return res.status(404).json({ error: 'laptop not found' });
+
+  const tx = db.transaction(() => {
+    insertAuditTrail({
+      entity_table: 'laptops',
+      entity_id: id,
+      action_type: 'DELETE',
+      previous_value: JSON.stringify(prev),
+      new_value: null,
+      changed_by: req.authUser?.username || 'system',
+    });
+    db.prepare('DELETE FROM laptops WHERE id = ?').run(id);
+  });
+  tx();
+  res.status(204).send();
+});
+
 // --- Excel export (ISO-oriented columns) ---
 app.get('/api/export/assets.xlsx', async (_req, res) => {
   const rows = db
     .prepare(`
-      SELECT a.id, a.asset_tag, a.name, a.status, a.location, a.classification, a.asset_type,
-             ou.name AS owner_name
-      FROM assets a
-      LEFT JOIN users ou ON ou.id = a.owner_user_id
-      ORDER BY a.asset_tag
+      SELECT *
+      FROM laptops
+      ORDER BY service_tag
     `)
     .all();
 
@@ -334,28 +503,34 @@ app.get('/api/export/assets.xlsx', async (_req, res) => {
   });
 
   sheet.columns = [
-    { header: 'ID', key: 'id', width: 8 },
-    { header: 'Asset Tag', key: 'asset_tag', width: 16 },
-    { header: 'Name', key: 'name', width: 28 },
-    { header: 'Owner', key: 'owner_name', width: 22 },
-    { header: 'Status', key: 'status', width: 12 },
-    { header: 'Location', key: 'location', width: 20 },
-    { header: 'Classification', key: 'classification', width: 14 },
-    { header: 'Type', key: 'asset_type', width: 12 },
+    { header: 'Asset type', key: 'asset_type', width: 14 },
+    { header: 'Asset Manufacturer', key: 'asset_manufacturer', width: 20 },
+    { header: 'Service Tag', key: 'service_tag', width: 18 },
+    { header: 'Model', key: 'model', width: 14 },
+    { header: 'P/N', key: 'p_n', width: 14 },
+    { header: 'Asset Owner', key: 'asset_owner', width: 18 },
+    { header: 'Assigned To', key: 'assigned_to', width: 18 },
+    { header: 'Asset Status', key: 'asset_status', width: 14 },
+    { header: 'Last Owner', key: 'last_owner', width: 16 },
+    { header: 'Dept', key: 'dept', width: 12 },
+    { header: 'Location', key: 'location', width: 16 },
+    { header: 'Asset Health', key: 'asset_health', width: 14 },
+    { header: 'Warranty', key: 'warranty', width: 12 },
+    { header: 'Install date', key: 'install_date', width: 14 },
+    { header: 'Date Added/Updated', key: 'date_added_updated', width: 18 },
+    { header: 'Processor', key: 'processor', width: 16 },
+    { header: 'RAM', key: 'ram', width: 10 },
+    { header: 'HardDisk', key: 'harddisk', width: 14 },
+    { header: 'O/S', key: 'o_s', width: 16 },
+    { header: 'Supt Vendor', key: 'supt_vendor', width: 14 },
+    { header: 'Keyboard', key: 'keyboard', width: 10 },
+    { header: 'Mouse', key: 'mouse', width: 10 },
+    { header: 'HeadPhone', key: 'headphone', width: 12 },
+    { header: 'USB Extender', key: 'usb_extender', width: 12 },
+    { header: 'Contains PII (Yes/No)', key: 'contains_pii', width: 18 },
   ];
 
-  rows.forEach((r) =>
-    sheet.addRow({
-      id: r.id,
-      asset_tag: r.asset_tag,
-      name: r.name,
-      owner_name: r.owner_name || '',
-      status: r.status,
-      location: r.location || '',
-      classification: r.classification,
-      asset_type: r.asset_type,
-    })
-  );
+  rows.forEach((r) => sheet.addRow(r));
 
   sheet.getRow(1).font = { bold: true };
 
@@ -372,7 +547,7 @@ app.get('/api/audit', (_req, res) => {
   const limit = Math.min(Number(_req.query.limit) || 100, 500);
   const entries = db
     .prepare(
-      `SELECT * FROM audit_trail WHERE entity_table = 'assets' ORDER BY id DESC LIMIT ?`
+      `SELECT * FROM audit_trail WHERE entity_table IN ('assets', 'laptops') ORDER BY id DESC LIMIT ?`
     )
     .all(limit);
   res.json(entries);

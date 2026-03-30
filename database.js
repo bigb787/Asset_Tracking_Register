@@ -58,6 +58,39 @@ function initSchema() {
       role TEXT NOT NULL DEFAULT 'admin',
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS laptops (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      asset_type TEXT,
+      asset_manufacturer TEXT,
+      service_tag TEXT NOT NULL UNIQUE,
+      model TEXT,
+      p_n TEXT,
+      asset_owner TEXT,
+      assigned_to TEXT,
+      asset_status TEXT,
+      last_owner TEXT,
+      dept TEXT,
+      location TEXT,
+      asset_health TEXT,
+      warranty TEXT,
+      install_date TEXT,
+      date_added_updated TEXT,
+      processor TEXT,
+      ram TEXT,
+      harddisk TEXT,
+      o_s TEXT,
+      supt_vendor TEXT,
+      keyboard TEXT,
+      mouse TEXT,
+      headphone TEXT,
+      usb_extender TEXT,
+      contains_pii TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_laptops_service_tag ON laptops(service_tag);
   `);
 }
 
