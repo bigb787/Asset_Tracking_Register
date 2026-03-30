@@ -49,6 +49,49 @@
       </div>
     </section>
 
+    <section id="gatepass-panel" class="card full-width hidden">
+      <h2>Laptop Gate Pass History</h2>
+      <div class="form-grid">
+        <label>Status
+          <select id="gp-status-filter">
+            <option value="all">all</option>
+            <option value="draft">draft</option>
+            <option value="approved">approved</option>
+            <option value="returned">returned</option>
+            <option value="cancelled">cancelled</option>
+          </select>
+        </label>
+        <label>Laptop ID (optional)
+          <input id="gp-laptop-filter" />
+        </label>
+        <label>Out Date From
+          <input id="gp-out-date-from" type="date" />
+        </label>
+        <label>Out Date To
+          <input id="gp-out-date-to" type="date" />
+        </label>
+        <button id="gp-refresh-btn" type="button" class="btn">Refresh Gate Passes</button>
+        <button id="gp-clear-btn" type="button" class="btn secondary">Clear Filters</button>
+      </div>
+      <div id="gp-badges" class="badge-row"></div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Gate Pass No</th>
+              <th>Laptop ID</th>
+              <th>Service Tag</th>
+              <th>Issued To</th>
+              <th>Out Date</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="gp-rows"></tbody>
+        </table>
+      </div>
+    </section>
+
     <section class="card full-width">
       <h2>Recent asset audit (updates & deletes)</h2>
       <ul id="audit-list" class="audit"></ul>

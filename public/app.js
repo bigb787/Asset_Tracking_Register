@@ -146,6 +146,7 @@ async function fetchJSON(url, opts) {
 
 let activeUser = null;
 let currentTable = TABLES[0];
+let gatepassLaptopFilter = '';
 
 function showLogin() {
   $('#login-view').classList.remove('hidden');
@@ -185,6 +186,11 @@ function renderTableSelector() {
 
 function renderDynamicForm() {
   $('#table-title').textContent = currentTable.label;
+  if (currentTable.key === 'laptops') {
+    $('#gatepass-panel').classList.remove('hidden');
+  } else {
+    $('#gatepass-panel').classList.add('hidden');
+  }
   const form = $('#dynamic-form');
   form.innerHTML = currentTable.fields
     .map(
@@ -201,7 +207,7 @@ async function loadCurrentTable() {
   const body = $('#data-rows');
   head.innerHTML = `<tr>${currentTable.fields
     .map(([, label]) => `<th>${escapeHtml(label)}</th>`)
-    .join('')}<th>Actions</th></tr>`;
+    .join('')}<th class="actions-col">Actions</th></tr>`;
   body.innerHTML = rows
     .map((r) => {
       const cols = currentTable.fields
@@ -209,17 +215,92 @@ async function loadCurrentTable() {
         .join('');
       const laptopGateBtn =
         currentTable.key === 'laptops'
-          ? `<button class="btn secondary row-gatepass" data-id="${r.id}">Gate Pass</button>`
+          ? `<button class="btn secondary row-gatepass" data-id="${r.id}">Gate Pass</button>
+             <button class="btn secondary row-gatepass-history" data-id="${r.id}">Gate Passes</button>`
           : '';
-      return `<tr>${cols}<td>${laptopGateBtn} <button class="btn danger row-delete" data-id="${r.id}">Delete</button></td></tr>`;
+      return `<tr>${cols}<td class="actions-col">
+        <div class="row-actions">
+          ${laptopGateBtn}
+          <button class="btn secondary row-edit" data-id="${r.id}">Edit</button>
+          <button class="btn danger row-delete" data-id="${r.id}">Delete</button>
+        </div>
+      </td></tr>`;
     })
     .join('');
+  body.querySelectorAll('.row-edit').forEach((btn) => {
+    btn.addEventListener('click', onEditRow);
+  });
   body.querySelectorAll('.row-delete').forEach((btn) => {
     btn.addEventListener('click', onDeleteRow);
   });
   body.querySelectorAll('.row-gatepass').forEach((btn) => {
     btn.addEventListener('click', onCreateLaptopGatepass);
   });
+  body.querySelectorAll('.row-gatepass-history').forEach((btn) => {
+    btn.addEventListener('click', onViewLaptopGatepassHistory);
+  });
+}
+
+async function loadGatePasses() {
+  if (currentTable.key !== 'laptops') return;
+  const status = $('#gp-status-filter').value || 'all';
+  const laptopId = ($('#gp-laptop-filter').value || '').trim();
+  const outDateFrom = ($('#gp-out-date-from').value || '').trim();
+  const outDateTo = ($('#gp-out-date-to').value || '').trim();
+  const q = new URLSearchParams();
+  q.set('status', status);
+  if (laptopId) q.set('laptop_id', laptopId);
+  if (outDateFrom) q.set('out_date_from', outDateFrom);
+  if (outDateTo) q.set('out_date_to', outDateTo);
+  const rows = await fetchJSON(`/api/laptop-gatepasses?${q.toString()}`);
+  renderGatepassBadges(rows);
+  const tbody = $('#gp-rows');
+  tbody.innerHTML = rows
+    .map((g) => {
+      const returnBtn =
+        g.status !== 'returned'
+          ? `<button class="btn secondary gp-return" data-id="${g.id}">Mark Returned</button>`
+          : '';
+      return `<tr>
+        <td>${escapeHtml(g.gatepass_no)}</td>
+        <td>${escapeHtml(g.laptop_id)}</td>
+        <td>${escapeHtml(g.service_tag || '—')}</td>
+        <td>${escapeHtml(g.issued_to || '—')}</td>
+        <td>${escapeHtml(g.out_date || '—')}</td>
+        <td>${escapeHtml(g.status || '—')}</td>
+        <td>
+          <button class="btn secondary gp-print" data-id="${g.id}">Print</button>
+          ${returnBtn}
+        </td>
+      </tr>`;
+    })
+    .join('');
+  tbody.querySelectorAll('.gp-print').forEach((btn) => {
+    btn.addEventListener('click', (ev) => {
+      const id = ev.target.getAttribute('data-id');
+      window.open(`/api/laptop-gatepasses/${id}/print`, '_blank');
+    });
+  });
+  tbody.querySelectorAll('.gp-return').forEach((btn) => {
+    btn.addEventListener('click', onMarkReturned);
+  });
+}
+
+function renderGatepassBadges(rows) {
+  const counts = { total: rows.length, draft: 0, approved: 0, returned: 0, cancelled: 0 };
+  rows.forEach((r) => {
+    const s = String(r.status || '').toLowerCase();
+    if (Object.prototype.hasOwnProperty.call(counts, s)) counts[s] += 1;
+  });
+  $('#gp-badges').innerHTML = [
+    `Total: ${counts.total}`,
+    `Draft: ${counts.draft}`,
+    `Approved: ${counts.approved}`,
+    `Returned: ${counts.returned}`,
+    `Cancelled: ${counts.cancelled}`,
+  ]
+    .map((t) => `<span class="badge">${escapeHtml(t)}</span>`)
+    .join('');
 }
 
 async function loadAudit() {
@@ -238,6 +319,7 @@ async function loadAudit() {
 
 async function refresh() {
   await loadCurrentTable();
+  await loadGatePasses();
   await loadAudit();
 }
 
@@ -309,6 +391,33 @@ async function onDeleteRow(ev) {
   }
 }
 
+async function onEditRow(ev) {
+  const id = ev.target.getAttribute('data-id');
+  const rowEl = ev.target.closest('tr');
+  if (!id || !rowEl) return;
+  const cells = Array.from(rowEl.querySelectorAll('td')).slice(0, currentTable.fields.length);
+  const patch = {};
+  for (let i = 0; i < currentTable.fields.length; i += 1) {
+    const [key, label] = currentTable.fields[i];
+    const currentValue = (cells[i]?.textContent || '').trim();
+    const normalizedCurrent = currentValue === '—' ? '' : currentValue;
+    const nextValue = prompt(`Edit ${label}:`, normalizedCurrent);
+    if (nextValue === null) return;
+    if (nextValue !== normalizedCurrent) patch[key] = nextValue.trim();
+  }
+  if (Object.keys(patch).length === 0) return;
+  try {
+    await fetchJSON(`/api/register/${currentTable.key}/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    });
+    await refresh();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
 async function onCreateLaptopGatepass(ev) {
   const laptopId = ev.target.getAttribute('data-id');
   const issuedTo = prompt('Issued To (required):');
@@ -336,6 +445,29 @@ async function onCreateLaptopGatepass(ev) {
     });
     window.open(`/api/laptop-gatepasses/${gp.id}/print`, '_blank');
     alert(`Gate pass created: ${gp.gatepass_no}`);
+    await loadGatePasses();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+function onViewLaptopGatepassHistory(ev) {
+  gatepassLaptopFilter = ev.target.getAttribute('data-id') || '';
+  $('#gp-laptop-filter').value = gatepassLaptopFilter;
+  loadGatePasses().catch((e) => console.error(e));
+}
+
+async function onMarkReturned(ev) {
+  const id = ev.target.getAttribute('data-id');
+  if (!confirm('Mark this gate pass as returned?')) return;
+  try {
+    await fetchJSON(`/api/laptop-gatepasses/${id}/status`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'returned' }),
+    });
+    await loadGatePasses();
+    await loadAudit();
   } catch (err) {
     alert(err.message);
   }
@@ -347,6 +479,29 @@ async function bootstrap() {
     showApp(session.user);
     renderTableSelector();
     renderDynamicForm();
+    $('#gp-refresh-btn').addEventListener('click', () => {
+      loadGatePasses().catch((e) => console.error(e));
+    });
+    $('#gp-status-filter').addEventListener('change', () => {
+      loadGatePasses().catch((e) => console.error(e));
+    });
+    $('#gp-clear-btn').addEventListener('click', () => {
+      $('#gp-status-filter').value = 'all';
+      $('#gp-laptop-filter').value = '';
+      $('#gp-out-date-from').value = '';
+      $('#gp-out-date-to').value = '';
+      gatepassLaptopFilter = '';
+      loadGatePasses().catch((e) => console.error(e));
+    });
+    $('#gp-laptop-filter').addEventListener('change', () => {
+      loadGatePasses().catch((e) => console.error(e));
+    });
+    $('#gp-out-date-from').addEventListener('change', () => {
+      loadGatePasses().catch((e) => console.error(e));
+    });
+    $('#gp-out-date-to').addEventListener('change', () => {
+      loadGatePasses().catch((e) => console.error(e));
+    });
     await refresh();
   } catch (_e) {
     showLogin();

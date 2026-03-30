@@ -550,6 +550,43 @@ app.get('/api/laptops/:id/gatepasses', (req, res) => {
   res.json(rows);
 });
 
+app.get('/api/laptop-gatepasses', (req, res) => {
+  const status = String(req.query.status || '').trim().toLowerCase();
+  const laptopId = req.query.laptop_id ? parseInt(String(req.query.laptop_id), 10) : null;
+  const outDateFrom = String(req.query.out_date_from || '').trim();
+  const outDateTo = String(req.query.out_date_to || '').trim();
+  const clauses = [];
+  const params = [];
+  if (status && status !== 'all') {
+    clauses.push('g.status = ?');
+    params.push(status);
+  }
+  if (Number.isInteger(laptopId)) {
+    clauses.push('g.laptop_id = ?');
+    params.push(laptopId);
+  }
+  if (outDateFrom) {
+    clauses.push('g.out_date >= ?');
+    params.push(outDateFrom);
+  }
+  if (outDateTo) {
+    clauses.push('g.out_date <= ?');
+    params.push(outDateTo);
+  }
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+  const rows = db
+    .prepare(
+      `SELECT g.*, l.service_tag, l.model, l.asset_owner
+       FROM laptop_gatepasses g
+       LEFT JOIN laptops l ON l.id = g.laptop_id
+       ${where}
+       ORDER BY g.id DESC
+       LIMIT 300`
+    )
+    .all(...params);
+  res.json(rows);
+});
+
 app.post('/api/laptops/:id/gatepasses', (req, res) => {
   const laptopId = parseInt(req.params.id, 10);
   if (!Number.isInteger(laptopId)) return res.status(400).json({ error: 'invalid id' });
