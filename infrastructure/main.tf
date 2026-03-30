@@ -31,71 +31,71 @@ data "aws_ami" "ubuntu_noble" {
 
 locals {
   user_data = <<-EOF
-    #!/bin/bash
-    set -euxo pipefail
-    export DEBIAN_FRONTEND=noninteractive
+#!/bin/bash
+set -euxo pipefail
+export DEBIAN_FRONTEND=noninteractive
 
-    APP_DIR="/opt/asset-register"
-    REPO_URL="${var.app_repo_url}"
-    REPO_BRANCH="${var.app_repo_branch}"
-    APP_PORT="${var.app_port}"
+APP_DIR="/opt/asset-register"
+REPO_URL="${var.app_repo_url}"
+REPO_BRANCH="${var.app_repo_branch}"
+APP_PORT="${var.app_port}"
 
-    apt-get update
-    apt-get install -y ca-certificates curl gnupg git nginx build-essential python3
+apt-get update
+apt-get install -y ca-certificates curl gnupg git nginx build-essential python3
 
-    # Ensure SSM is running (usually preinstalled, but safe to restart).
-    systemctl restart amazon-ssm-agent || true
+# Ensure SSM is running (usually preinstalled, but safe to restart).
+systemctl restart amazon-ssm-agent || true
 
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-    apt-get install -y nodejs
-    npm install -g pm2
+curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+apt-get install -y nodejs
+npm install -g pm2
 
-    rm -rf "$APP_DIR"
-    git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" "$APP_DIR" || git clone --depth 1 "$REPO_URL" "$APP_DIR"
+rm -rf "$APP_DIR"
+git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" "$APP_DIR" || git clone --depth 1 "$REPO_URL" "$APP_DIR"
 
-    cd "$APP_DIR"
+cd "$APP_DIR"
 
-    # Start the Node app if this repo contains a runnable Node project.
-    if [ -f package.json ]; then
-      npm install --omit=dev || npm install
+# Start the Node app if this repo contains a runnable Node project.
+if [ -f package.json ]; then
+  npm install --omit=dev || npm install
 
-      pm2 delete asset-register || true
-      PORT="$APP_PORT" pm2 start npm --name asset-register -- start
-      pm2 save
+  pm2 delete asset-register || true
+  PORT="$APP_PORT" pm2 start npm --name asset-register -- start
+  pm2 save
 
-      # Ensure PM2 restarts on reboot
-      env PATH="$PATH:/usr/bin" pm2 startup systemd -u root --hp /root || true
-    else
-      echo "package.json not found in $REPO_URL; app will not start." | tee /var/log/asset-register-userdata.log
-    fi
+  # Ensure PM2 restarts on reboot
+  env PATH="$PATH:/usr/bin" pm2 startup systemd -u root --hp /root || true
+else
+  echo "package.json not found in $REPO_URL; app will not start." | tee /var/log/asset-register-userdata.log
+fi
 
-    # Expose the app on port 80 (reverse proxy to Node on APP_PORT)
-    cat > /etc/nginx/sites-available/asset-register <<NGINX
-    server {
-      listen 80 default_server;
-      server_name _;
+# Expose the app on port 80 (reverse proxy to Node on APP_PORT)
+cat > /etc/nginx/sites-available/asset-register <<NGINX
+server {
+  listen 80 default_server;
+  server_name _;
 
-      location / {
-        proxy_pass http://127.0.0.1:$APP_PORT;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host \$host;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_cache_bypass \$http_upgrade;
-      }
-    }
+  location / {
+    proxy_pass http://127.0.0.1:$APP_PORT;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade \$http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host \$host;
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_cache_bypass \$http_upgrade;
+  }
+}
 NGINX
 
-    ln -sf /etc/nginx/sites-available/asset-register /etc/nginx/sites-enabled/asset-register
-    rm -f /etc/nginx/sites-enabled/default || true
-    systemctl enable nginx
-    systemctl restart nginx
+ln -sf /etc/nginx/sites-available/asset-register /etc/nginx/sites-enabled/asset-register
+rm -f /etc/nginx/sites-enabled/default || true
+systemctl enable nginx
+systemctl restart nginx
 
-    node --version
-    npm --version
-    pm2 --version
-  EOF
+node --version
+npm --version
+pm2 --version
+EOF
 }
 
 resource "aws_security_group" "app" {
@@ -176,7 +176,7 @@ resource "aws_instance" "app" {
   key_name               = var.key_name
   vpc_security_group_ids = [aws_security_group.app.id]
   subnet_id              = sort(data.aws_subnets.default.ids)[0]
-  user_data              = base64encode(local.user_data)
+  user_data              = local.user_data
   iam_instance_profile   = aws_iam_instance_profile.ec2_ssm_profile.name
 
   associate_public_ip_address = var.associate_public_ip
