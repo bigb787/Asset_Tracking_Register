@@ -30,74 +30,21 @@
   </main>
 
   <main id="app-view" class="layout hidden">
-    <section class="card">
-      <h2>Users</h2>
-      <form id="user-form" class="form-grid">
-        <label>Name<input name="name" required /></label>
-        <label>Email<input name="email" type="email" required /></label>
-        <label>Department<input name="department" /></label>
-        <button type="submit" class="btn">Add user</button>
-      </form>
-      <ul id="user-list" class="list"></ul>
+    <section class="card full-width">
+      <h2>Asset Registers</h2>
+      <label>Choose Table
+        <select id="table-select"></select>
+      </label>
+      <form id="dynamic-form" class="form-grid"></form>
     </section>
 
     <section class="card full-width">
-      <h2>Add laptop (Table 1)</h2>
-      <form id="laptop-form" class="form-grid">
-        <label>Asset type<input name="asset_type" /></label>
-        <label>Asset Manufacturer<input name="asset_manufacturer" /></label>
-        <label>Service Tag<input name="service_tag" required /></label>
-        <label>Model<input name="model" /></label>
-        <label>P/N<input name="p_n" /></label>
-        <label>Asset Owner<input name="asset_owner" /></label>
-        <label>Assigned To<input name="assigned_to" /></label>
-        <label>Asset Status<input name="asset_status" /></label>
-        <label>Last Owner<input name="last_owner" /></label>
-        <label>Dept<input name="dept" /></label>
-        <label>Location<input name="location" /></label>
-        <label>Asset Health<input name="asset_health" /></label>
-        <label>Warranty<input name="warranty" /></label>
-        <label>Install date<input name="install_date" type="date" /></label>
-        <label>Date Added/Updated<input name="date_added_updated" /></label>
-        <label>Processor<input name="processor" /></label>
-        <label>RAM<input name="ram" /></label>
-        <label>HardDisk<input name="harddisk" /></label>
-        <label>O/S<input name="o_s" /></label>
-        <label>Supt Vendor<input name="supt_vendor" /></label>
-        <label>Keyboard<input name="keyboard" /></label>
-        <label>Mouse<input name="mouse" /></label>
-        <label>HeadPhone<input name="headphone" /></label>
-        <label>USB Extender<input name="usb_extender" /></label>
-        <label>Contains PII (Yes/No)
-          <select name="contains_pii">
-            <option value=""></option>
-            <option value="Yes">Yes</option>
-            <option value="No">No</option>
-          </select>
-        </label>
-        <button type="submit" class="btn">Create laptop record</button>
-      </form>
-    </section>
-
-    <section class="card full-width">
-      <h2>Laptops</h2>
-      <p class="hint">First table fields implemented as requested. You can add/update the remaining 10 tables similarly.</p>
+      <h2 id="table-title">Records</h2>
+      <p class="hint">Headers are set per table as requested. "Free (?)" is captured as <code>free_note</code>.</p>
       <div class="table-wrap">
         <table class="data-table">
-          <thead>
-            <tr>
-              <th>Service Tag</th>
-              <th>Manufacturer</th>
-              <th>Model</th>
-              <th>Owner</th>
-              <th>Assigned To</th>
-              <th>Status</th>
-              <th>Dept</th>
-              <th>Location</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="laptop-rows"></tbody>
+          <thead id="data-head"></thead>
+          <tbody id="data-rows"></tbody>
         </table>
       </div>
     </section>

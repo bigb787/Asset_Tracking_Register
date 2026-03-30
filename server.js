@@ -145,6 +145,42 @@ function laptopExistsByServiceTag(tag, excludeId) {
   return !!row;
 }
 
+const TABLE_CONFIG = {
+  laptops: { uniqueField: 'service_tag' },
+  desktops: { uniqueField: 'service_tag' },
+  monitors: {},
+  networking: { uniqueField: 's_n' },
+  cloud_asset_register: {},
+  infodesk_applications: {},
+  third_party_softwares: {},
+  ups: { uniqueField: 'device_id' },
+  mobile_phones: {},
+  scanners_and_others: { uniqueField: 's_n' },
+  admin_assets: { uniqueField: 'invoice_no' },
+};
+
+function normalizeInputRow(body) {
+  const out = {};
+  Object.keys(body || {}).forEach((k) => {
+    if (k === 'id') return;
+    const v = body[k];
+    out[k] = v === '' ? null : v;
+  });
+  return out;
+}
+
+function existsByUniqueField(tableName, fieldName, fieldValue, excludeId) {
+  if (!fieldName || !fieldValue) return false;
+  if (excludeId != null) {
+    const row = db
+      .prepare(`SELECT id FROM ${tableName} WHERE ${fieldName} = ? AND id != ?`)
+      .get(fieldValue, excludeId);
+    return !!row;
+  }
+  const row = db.prepare(`SELECT id FROM ${tableName} WHERE ${fieldName} = ?`).get(fieldValue);
+  return !!row;
+}
+
 // --- Users ---
 app.get('/api/users', (_req, res) => {
   const users = db.prepare('SELECT * FROM users ORDER BY name').all();
@@ -486,6 +522,109 @@ app.delete('/api/laptops/:id', (req, res) => {
   res.status(204).send();
 });
 
+app.get('/api/register/:table', (req, res) => {
+  const table = req.params.table;
+  if (!TABLE_CONFIG[table]) return res.status(404).json({ error: 'table not found' });
+  const rows = db.prepare(`SELECT * FROM ${table} ORDER BY id DESC`).all();
+  res.json(rows);
+});
+
+app.post('/api/register/:table', (req, res) => {
+  const table = req.params.table;
+  const cfg = TABLE_CONFIG[table];
+  if (!cfg) return res.status(404).json({ error: 'table not found' });
+
+  const row = normalizeInputRow(req.body);
+  if (cfg.uniqueField) {
+    const uniqueValue = String(row[cfg.uniqueField] || '').trim();
+    if (!uniqueValue) {
+      return res.status(400).json({ error: `${cfg.uniqueField} is required` });
+    }
+    row[cfg.uniqueField] = uniqueValue;
+    if (existsByUniqueField(table, cfg.uniqueField, uniqueValue)) {
+      return res.status(409).json({ error: `${cfg.uniqueField} must be unique` });
+    }
+  }
+
+  const keys = Object.keys(row);
+  if (keys.length === 0) return res.status(400).json({ error: 'no fields provided' });
+  const cols = keys.join(', ');
+  const placeholders = keys.map(() => '?').join(', ');
+  const values = keys.map((k) => row[k]);
+  const info = db.prepare(`INSERT INTO ${table} (${cols}) VALUES (${placeholders})`).run(...values);
+  const created = db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(info.lastInsertRowid);
+  res.status(201).json(created);
+});
+
+app.patch('/api/register/:table/:id', (req, res) => {
+  const table = req.params.table;
+  const cfg = TABLE_CONFIG[table];
+  if (!cfg) return res.status(404).json({ error: 'table not found' });
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'invalid id' });
+
+  const prev = db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(id);
+  if (!prev) return res.status(404).json({ error: 'record not found' });
+
+  const patch = normalizeInputRow(req.body);
+  delete patch.id;
+  if (Object.keys(patch).length === 0) {
+    return res.status(400).json({ error: 'no fields provided' });
+  }
+
+  if (cfg.uniqueField && Object.prototype.hasOwnProperty.call(patch, cfg.uniqueField)) {
+    const uniqueValue = String(patch[cfg.uniqueField] || '').trim();
+    if (!uniqueValue) return res.status(400).json({ error: `${cfg.uniqueField} cannot be empty` });
+    patch[cfg.uniqueField] = uniqueValue;
+    if (existsByUniqueField(table, cfg.uniqueField, uniqueValue, id)) {
+      return res.status(409).json({ error: `${cfg.uniqueField} must be unique` });
+    }
+  }
+
+  const sets = Object.keys(patch)
+    .map((k) => `${k} = @${k}`)
+    .concat(["updated_at = datetime('now')"])
+    .join(', ');
+
+  const tx = db.transaction(() => {
+    db.prepare(`UPDATE ${table} SET ${sets} WHERE id = @id`).run({ ...patch, id });
+    const next = db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(id);
+    insertAuditTrail({
+      entity_table: table,
+      entity_id: id,
+      action_type: 'UPDATE',
+      previous_value: JSON.stringify(prev),
+      new_value: JSON.stringify(next),
+      changed_by: req.authUser?.username || 'system',
+    });
+  });
+  tx();
+  res.json(db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(id));
+});
+
+app.delete('/api/register/:table/:id', (req, res) => {
+  const table = req.params.table;
+  if (!TABLE_CONFIG[table]) return res.status(404).json({ error: 'table not found' });
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'invalid id' });
+  const prev = db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(id);
+  if (!prev) return res.status(404).json({ error: 'record not found' });
+
+  const tx = db.transaction(() => {
+    insertAuditTrail({
+      entity_table: table,
+      entity_id: id,
+      action_type: 'DELETE',
+      previous_value: JSON.stringify(prev),
+      new_value: null,
+      changed_by: req.authUser?.username || 'system',
+    });
+    db.prepare(`DELETE FROM ${table} WHERE id = ?`).run(id);
+  });
+  tx();
+  res.status(204).send();
+});
+
 // --- Excel export (ISO-oriented columns) ---
 app.get('/api/export/assets.xlsx', async (_req, res) => {
   const rows = db
@@ -545,11 +684,7 @@ app.get('/api/export/assets.xlsx', async (_req, res) => {
 
 app.get('/api/audit', (_req, res) => {
   const limit = Math.min(Number(_req.query.limit) || 100, 500);
-  const entries = db
-    .prepare(
-      `SELECT * FROM audit_trail WHERE entity_table IN ('assets', 'laptops') ORDER BY id DESC LIMIT ?`
-    )
-    .all(limit);
+  const entries = db.prepare(`SELECT * FROM audit_trail ORDER BY id DESC LIMIT ?`).all(limit);
   res.json(entries);
 });
 

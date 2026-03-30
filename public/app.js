@@ -1,4 +1,128 @@
 const $ = (sel) => document.querySelector(sel);
+const TABLES = [
+  {
+    key: 'laptops',
+    label: 'Laptop',
+    fields: [
+      ['asset_type', 'Asset type'],
+      ['asset_manufacturer', 'Asset Manufacturer'],
+      ['service_tag', 'Service Tag'],
+      ['model', 'Model'],
+      ['p_n', 'P/N'],
+      ['asset_owner', 'Asset Owner'],
+      ['assigned_to', 'Assigned To'],
+      ['asset_status', 'Asset Status'],
+      ['last_owner', 'Last Owner'],
+      ['dept', 'Dept'],
+      ['location', 'Location'],
+      ['asset_health', 'Asset Health'],
+      ['warranty', 'Warranty'],
+      ['install_date', 'Install date'],
+      ['date_added_updated', 'Date Added/Updated'],
+      ['processor', 'Processor'],
+      ['ram', 'RAM'],
+      ['harddisk', 'HardDisk'],
+      ['o_s', 'O/S'],
+      ['supt_vendor', 'Supt Vendor'],
+      ['keyboard', 'Keyboard'],
+      ['mouse', 'Mouse'],
+      ['headphone', 'HeadPhone'],
+      ['usb_extender', 'USB Extender'],
+      ['contains_pii', 'Contains PII (Yes/No)'],
+      ['free_note', 'Free (?)'],
+    ],
+  },
+  {
+    key: 'desktops',
+    label: 'Desktop',
+    fields: [
+      ['asset_type', 'Asset type'], ['asset_manufacturer', 'Asset Manufacturer'], ['processor', 'Processor'],
+      ['asset_owner', 'Asset Owner'], ['dept', 'Dept'], ['location', 'Location'], ['model', 'Model'],
+      ['service_tag', 'Service Tag'], ['warranty', 'Warranty'], ['install_date', 'Install date'],
+      ['o_s', 'O/S'], ['supt_vendor', 'Supt Vendor'], ['configuration', 'Configuration'],
+      ['contains_pii', 'Contains PII (Yes/No)'], ['date_added_updated', 'Date Added/Updated'], ['free_note', 'Free (?)'],
+    ],
+  },
+  {
+    key: 'monitors',
+    label: 'Monitor',
+    fields: [
+      ['asset_type', 'Asset type'], ['user_name', 'User'], ['model', 'Model'], ['warranty', 'Warranty'],
+      ['install_date', 'INSTALL DATE'], ['supt_vendor', 'Supt Vendor'], ['location', 'Location'], ['dept', 'Dept'],
+      ['asset_owner', 'Asset Owner'], ['contains_pii', 'Contains PII (Yes/No)'], ['date_added_updated', 'Date Added/Updated'], ['free_note', 'Free (?)'],
+    ],
+  },
+  {
+    key: 'networking',
+    label: 'Networking',
+    fields: [
+      ['asset_type', 'Asset type'], ['user_name', 'User'], ['model', 'Model'], ['s_n', 'S/N'],
+      ['warranty', 'Warranty'], ['supt_vendor', 'Supt Vendor'], ['location', 'Location'], ['dept', 'Dept'],
+      ['asset_owner', 'Asset Owner'], ['contains_pii', 'Contains PII (Yes/No)'], ['date_added_updated', 'Date Added/Updated'], ['free_note', 'Free (?)'],
+    ],
+  },
+  {
+    key: 'cloud_asset_register',
+    label: 'Cloud Asset Register',
+    fields: [
+      ['asset', 'Asset'], ['asset_type', 'Asset Type'], ['asset_value', 'Asset Value'], ['asset_owner', 'Asset Owner'],
+      ['asset_location', 'Asset Location'], ['contains_pii_data', 'Contains PII data?'], ['asset_region', 'Asset Region'],
+      ['date_added_updated', 'Date Added/ Updated'], ['free_note', 'Free (?)'],
+    ],
+  },
+  {
+    key: 'infodesk_applications',
+    label: 'Infodesk Applications',
+    fields: [
+      ['asset', 'Asset'], ['asset_type', 'Asset Type'], ['asset_owner', 'Asset Owner'], ['asset_location', 'Asset Location'],
+      ['contains_pii_data', 'Contains PII data?'], ['date_added_updated', 'Date Added/ Updated'], ['free_note', 'Free (?)'],
+    ],
+  },
+  {
+    key: 'third_party_softwares',
+    label: 'Third Party Softwares',
+    fields: [
+      ['asset', 'Asset'], ['asset_type', 'Asset Type'], ['asset_value', 'Asset Value'], ['asset_owner', 'Asset Owner'],
+      ['asset_location', 'Asset Location'], ['contains_pii_data', 'Contains PII data?'], ['date_added_updated', 'Date Added/ Updated'], ['free_note', 'Free (?)'],
+    ],
+  },
+  {
+    key: 'ups',
+    label: 'UPS',
+    fields: [
+      ['asset_type', 'Asset type'], ['device_id', 'Device Id'], ['model', 'Model'], ['warranty', 'Warranty'],
+      ['install_date', 'INSTALL DATE'], ['supt_vendor', 'Supt Vendor'], ['location', 'Location'], ['dept', 'Dept'],
+      ['asset_owner', 'Asset Owner'], ['date_added_updated', 'Date Added/Updated'], ['free_note', 'Free (?)'],
+    ],
+  },
+  {
+    key: 'mobile_phones',
+    label: 'Mobile Phones',
+    fields: [
+      ['asset_type', 'Asset type'], ['model', 'Model'], ['warranty', 'Warranty'], ['supt_vendor', 'Supt Vendor'],
+      ['location', 'Location'], ['dept', 'Dept'], ['asset_owner', 'Asset Owner'], ['contains_pii', 'Contains PII (Yes/No)'],
+      ['date_added_updated', 'Date Added/Updated'], ['free_note', 'Free (?)'],
+    ],
+  },
+  {
+    key: 'scanners_and_others',
+    label: 'Scanners and Others',
+    fields: [
+      ['asset_type', 'Asset type'], ['model', 'Model'], ['s_n', 'S/N'], ['warranty', 'Warranty'], ['supt_vendor', 'Supt Vendor'],
+      ['location', 'Location'], ['dept', 'Dept'], ['asset_owner', 'Asset Owner'], ['contains_pii', 'Contains PII (Yes/No)'],
+      ['date_added_updated', 'Date Added/Updated'], ['free_note', 'Free (?)'],
+    ],
+  },
+  {
+    key: 'admin_assets',
+    label: 'Admin',
+    fields: [
+      ['asset_type', 'Asset type'], ['invoice_no', 'Invoice No'], ['warranty', 'Warranty'], ['install_date', 'INSTALL DATE'],
+      ['supt_vendor', 'Supt Vendor'], ['location', 'Location'], ['dept', 'Dept'], ['asset_owner', 'Asset Owner'],
+      ['contains_pii', 'Contains PII (Yes/No)'], ['date_added_updated', 'Date Added/Updated'], ['free_note', 'Free (?)'],
+    ],
+  },
+];
 
 async function fetchJSON(url, opts) {
   const res = await fetch(url, opts);
@@ -20,8 +144,8 @@ async function fetchJSON(url, opts) {
   return data;
 }
 
-let users = [];
 let activeUser = null;
+let currentTable = TABLES[0];
 
 function showLogin() {
   $('#login-view').classList.remove('hidden');
@@ -38,15 +162,6 @@ function showApp(user) {
   $('#auth-user').textContent = `Logged in as ${user.username}`;
 }
 
-function userOptionsHtml(selectedId, includeEmpty = true) {
-  let html = includeEmpty ? '<option value="">— none —</option>' : '';
-  for (const u of users) {
-    const sel = String(u.id) === String(selectedId) ? ' selected' : '';
-    html += `<option value="${u.id}"${sel}>${escapeHtml(u.name)}</option>`;
-  }
-  return html;
-}
-
 function escapeHtml(s) {
   return String(s)
     .replace(/&/g, '&amp;')
@@ -55,40 +170,50 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
-async function loadUsers() {
-  users = await fetchJSON('/api/users');
-  $('#user-list').innerHTML = users
-    .map(
-      (u) =>
-        `<li><strong>${escapeHtml(u.name)}</strong> — ${escapeHtml(u.email)}${
-          u.department ? ` (${escapeHtml(u.department)})` : ''
-        }</li>`
-    )
-    .join('');
+function renderTableSelector() {
+  const select = $('#table-select');
+  select.innerHTML = TABLES.map((t) => `<option value="${t.key}">${escapeHtml(t.label)}</option>`).join('');
+  select.value = currentTable.key;
+  select.addEventListener('change', async (ev) => {
+    const selected = TABLES.find((t) => t.key === ev.target.value);
+    if (!selected) return;
+    currentTable = selected;
+    renderDynamicForm();
+    await loadCurrentTable();
+  });
 }
 
-async function loadLaptops() {
-  const laptops = await fetchJSON('/api/laptops');
-  const tbody = $('#laptop-rows');
-  tbody.innerHTML = laptops
+function renderDynamicForm() {
+  $('#table-title').textContent = currentTable.label;
+  const form = $('#dynamic-form');
+  form.innerHTML = currentTable.fields
     .map(
-      (a) => `
-    <tr data-id="${a.id}">
-      <td>${escapeHtml(a.service_tag || '—')}</td>
-      <td>${escapeHtml(a.asset_manufacturer || '—')}</td>
-      <td>${escapeHtml(a.model || '—')}</td>
-      <td>${escapeHtml(a.asset_owner || '—')}</td>
-      <td>${escapeHtml(a.assigned_to || '—')}</td>
-      <td>${escapeHtml(a.asset_status || '—')}</td>
-      <td>${escapeHtml(a.dept || '—')}</td>
-      <td>${escapeHtml(a.location || '—')}</td>
-      <td><button type="button" class="btn danger btn-delete" data-laptop-id="${a.id}">Delete</button></td>
-    </tr>`
+      ([key, label]) =>
+        `<label>${escapeHtml(label)}<input name="${escapeHtml(key)}" /></label>`
     )
     .join('');
+  form.insertAdjacentHTML('beforeend', '<button type="submit" class="btn">Add record</button>');
+}
 
-  tbody.querySelectorAll('.btn-delete').forEach((btn) => {
-    btn.addEventListener('click', onDeleteLaptop);
+async function loadCurrentTable() {
+  const rows = await fetchJSON(`/api/register/${currentTable.key}`);
+  const head = $('#data-head');
+  const body = $('#data-rows');
+  head.innerHTML = `<tr>${currentTable.fields
+    .slice(0, 8)
+    .map(([, label]) => `<th>${escapeHtml(label)}</th>`)
+    .join('')}<th>Actions</th></tr>`;
+  body.innerHTML = rows
+    .map((r) => {
+      const cols = currentTable.fields
+        .slice(0, 8)
+        .map(([k]) => `<td>${escapeHtml(r[k] ?? '—')}</td>`)
+        .join('');
+      return `<tr>${cols}<td><button class="btn danger row-delete" data-id="${r.id}">Delete</button></td></tr>`;
+    })
+    .join('');
+  body.querySelectorAll('.row-delete').forEach((btn) => {
+    btn.addEventListener('click', onDeleteRow);
   });
 }
 
@@ -107,8 +232,7 @@ async function loadAudit() {
 }
 
 async function refresh() {
-  await loadUsers();
-  await loadLaptops();
+  await loadCurrentTable();
   await loadAudit();
 }
 
@@ -142,32 +266,12 @@ $('#logout-btn').addEventListener('click', async () => {
   showLogin();
 });
 
-$('#user-form').addEventListener('submit', async (ev) => {
-  ev.preventDefault();
-  const fd = new FormData(ev.target);
-  try {
-    await fetchJSON('/api/users', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: fd.get('name'),
-        email: fd.get('email'),
-        department: fd.get('department'),
-      }),
-    });
-    ev.target.reset();
-    await refresh();
-  } catch (err) {
-    alert(err.message);
-  }
-});
-
-$('#laptop-form').addEventListener('submit', async (ev) => {
+$('#dynamic-form').addEventListener('submit', async (ev) => {
   ev.preventDefault();
   const fd = new FormData(ev.target);
   const body = Object.fromEntries(fd.entries());
   try {
-    await fetchJSON('/api/laptops', {
+    await fetchJSON(`/api/register/${currentTable.key}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -179,11 +283,11 @@ $('#laptop-form').addEventListener('submit', async (ev) => {
   }
 });
 
-async function onDeleteLaptop(ev) {
-  const id = ev.target.getAttribute('data-laptop-id');
-  if (!confirm('Delete this laptop record? This is logged in the audit trail.')) return;
+async function onDeleteRow(ev) {
+  const id = ev.target.getAttribute('data-id');
+  if (!confirm(`Delete this ${currentTable.label} record?`)) return;
   try {
-    const res = await fetch(`/api/laptops/${id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/register/${currentTable.key}/${id}`, { method: 'DELETE' });
     if (!res.ok) {
       const text = await res.text();
       let msg = res.statusText;
@@ -204,6 +308,8 @@ async function bootstrap() {
   try {
     const session = await fetchJSON('/api/auth/session');
     showApp(session.user);
+    renderTableSelector();
+    renderDynamicForm();
     await refresh();
   } catch (_e) {
     showLogin();

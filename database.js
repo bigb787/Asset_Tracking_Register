@@ -91,6 +91,173 @@ function initSchema() {
     );
 
     CREATE INDEX IF NOT EXISTS idx_laptops_service_tag ON laptops(service_tag);
+
+    CREATE TABLE IF NOT EXISTS desktops (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      asset_type TEXT,
+      asset_manufacturer TEXT,
+      processor TEXT,
+      asset_owner TEXT,
+      dept TEXT,
+      location TEXT,
+      model TEXT,
+      service_tag TEXT UNIQUE,
+      warranty TEXT,
+      install_date TEXT,
+      o_s TEXT,
+      supt_vendor TEXT,
+      configuration TEXT,
+      contains_pii TEXT,
+      date_added_updated TEXT,
+      free_note TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS monitors (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      asset_type TEXT,
+      user_name TEXT,
+      model TEXT,
+      warranty TEXT,
+      install_date TEXT,
+      supt_vendor TEXT,
+      location TEXT,
+      dept TEXT,
+      asset_owner TEXT,
+      contains_pii TEXT,
+      date_added_updated TEXT,
+      free_note TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS networking (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      asset_type TEXT,
+      user_name TEXT,
+      model TEXT,
+      s_n TEXT,
+      warranty TEXT,
+      supt_vendor TEXT,
+      location TEXT,
+      dept TEXT,
+      asset_owner TEXT,
+      contains_pii TEXT,
+      date_added_updated TEXT,
+      free_note TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS cloud_asset_register (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      asset TEXT,
+      asset_type TEXT,
+      asset_value TEXT,
+      asset_owner TEXT,
+      asset_location TEXT,
+      contains_pii_data TEXT,
+      asset_region TEXT,
+      date_added_updated TEXT,
+      free_note TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS infodesk_applications (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      asset TEXT,
+      asset_type TEXT,
+      asset_owner TEXT,
+      asset_location TEXT,
+      contains_pii_data TEXT,
+      date_added_updated TEXT,
+      free_note TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS third_party_softwares (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      asset TEXT,
+      asset_type TEXT,
+      asset_value TEXT,
+      asset_owner TEXT,
+      asset_location TEXT,
+      contains_pii_data TEXT,
+      date_added_updated TEXT,
+      free_note TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS ups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      asset_type TEXT,
+      device_id TEXT,
+      model TEXT,
+      warranty TEXT,
+      install_date TEXT,
+      supt_vendor TEXT,
+      location TEXT,
+      dept TEXT,
+      asset_owner TEXT,
+      date_added_updated TEXT,
+      free_note TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS mobile_phones (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      asset_type TEXT,
+      model TEXT,
+      warranty TEXT,
+      supt_vendor TEXT,
+      location TEXT,
+      dept TEXT,
+      asset_owner TEXT,
+      contains_pii TEXT,
+      date_added_updated TEXT,
+      free_note TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS scanners_and_others (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      asset_type TEXT,
+      model TEXT,
+      s_n TEXT,
+      warranty TEXT,
+      supt_vendor TEXT,
+      location TEXT,
+      dept TEXT,
+      asset_owner TEXT,
+      contains_pii TEXT,
+      date_added_updated TEXT,
+      free_note TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS admin_assets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      asset_type TEXT,
+      invoice_no TEXT,
+      warranty TEXT,
+      install_date TEXT,
+      supt_vendor TEXT,
+      location TEXT,
+      dept TEXT,
+      asset_owner TEXT,
+      contains_pii TEXT,
+      date_added_updated TEXT,
+      free_note TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 }
 
