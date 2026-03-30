@@ -43,6 +43,9 @@ locals {
     apt-get update
     apt-get install -y ca-certificates curl gnupg git nginx build-essential python3
 
+    # Ensure SSM is running (usually preinstalled, but safe to restart).
+    systemctl restart amazon-ssm-agent || true
+
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
     apt-get install -y nodejs
     npm install -g pm2
@@ -136,6 +139,37 @@ resource "aws_security_group" "app" {
   }
 }
 
+resource "aws_iam_role" "ec2_ssm_role" {
+  name = "asset-register-ec2-ssm-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+
+  tags = {
+    Project = "asset-register"
+  }
+}
+
+resource "aws_iam_role_policy_attachment" "ec2_ssm_core" {
+  role       = aws_iam_role.ec2_ssm_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_instance_profile" "ec2_ssm_profile" {
+  name = "asset-register-ec2-ssm-profile"
+  role = aws_iam_role.ec2_ssm_role.name
+}
+
 resource "aws_instance" "app" {
   ami                    = data.aws_ami.ubuntu_noble.id
   instance_type          = var.instance_type
@@ -143,6 +177,7 @@ resource "aws_instance" "app" {
   vpc_security_group_ids = [aws_security_group.app.id]
   subnet_id              = sort(data.aws_subnets.default.ids)[0]
   user_data              = base64encode(local.user_data)
+  iam_instance_profile   = aws_iam_instance_profile.ec2_ssm_profile.name
 
   associate_public_ip_address = var.associate_public_ip
 
@@ -159,6 +194,7 @@ resource "aws_instance" "app" {
   }
 
   tags = {
-    Name = "asset-register-ubuntu"
+    Name    = "asset-register-ubuntu"
+    Project = "asset-register"
   }
 }
