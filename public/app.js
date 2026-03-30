@@ -207,11 +207,18 @@ async function loadCurrentTable() {
       const cols = currentTable.fields
         .map(([k]) => `<td>${escapeHtml(r[k] ?? '—')}</td>`)
         .join('');
-      return `<tr>${cols}<td><button class="btn danger row-delete" data-id="${r.id}">Delete</button></td></tr>`;
+      const laptopGateBtn =
+        currentTable.key === 'laptops'
+          ? `<button class="btn secondary row-gatepass" data-id="${r.id}">Gate Pass</button>`
+          : '';
+      return `<tr>${cols}<td>${laptopGateBtn} <button class="btn danger row-delete" data-id="${r.id}">Delete</button></td></tr>`;
     })
     .join('');
   body.querySelectorAll('.row-delete').forEach((btn) => {
     btn.addEventListener('click', onDeleteRow);
+  });
+  body.querySelectorAll('.row-gatepass').forEach((btn) => {
+    btn.addEventListener('click', onCreateLaptopGatepass);
   });
 }
 
@@ -297,6 +304,38 @@ async function onDeleteRow(ev) {
       throw new Error(msg);
     }
     await refresh();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+async function onCreateLaptopGatepass(ev) {
+  const laptopId = ev.target.getAttribute('data-id');
+  const issuedTo = prompt('Issued To (required):');
+  if (!issuedTo) return;
+  const purpose = prompt('Purpose (required):');
+  if (!purpose) return;
+  const outDate = prompt('Out Date (YYYY-MM-DD, required):', new Date().toISOString().slice(0, 10));
+  if (!outDate) return;
+  const expectedReturnDate = prompt('Expected Return Date (YYYY-MM-DD, optional):', '');
+  const approvedBy = prompt('Approved By (optional):', '');
+  const remarks = prompt('Remarks (optional):', '');
+
+  try {
+    const gp = await fetchJSON(`/api/laptops/${laptopId}/gatepasses`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        issued_to: issuedTo,
+        purpose,
+        out_date: outDate,
+        expected_return_date: expectedReturnDate || null,
+        approved_by: approvedBy || null,
+        remarks: remarks || null,
+      }),
+    });
+    window.open(`/api/laptop-gatepasses/${gp.id}/print`, '_blank');
+    alert(`Gate pass created: ${gp.gatepass_no}`);
   } catch (err) {
     alert(err.message);
   }

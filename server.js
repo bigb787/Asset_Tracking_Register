@@ -145,6 +145,25 @@ function laptopExistsByServiceTag(tag, excludeId) {
   return !!row;
 }
 
+function nextLaptopGatepassNo() {
+  const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const like = `GP-LAP-${datePart}-%`;
+  const row = db
+    .prepare(
+      `SELECT gatepass_no FROM laptop_gatepasses
+       WHERE gatepass_no LIKE ?
+       ORDER BY id DESC LIMIT 1`
+    )
+    .get(like);
+  let seq = 1;
+  if (row?.gatepass_no) {
+    const parts = row.gatepass_no.split('-');
+    const last = parseInt(parts[parts.length - 1], 10);
+    if (Number.isInteger(last)) seq = last + 1;
+  }
+  return `GP-LAP-${datePart}-${String(seq).padStart(4, '0')}`;
+}
+
 const TABLE_CONFIG = {
   laptops: { uniqueField: 'service_tag' },
   desktops: { uniqueField: 'service_tag' },
@@ -520,6 +539,127 @@ app.delete('/api/laptops/:id', (req, res) => {
   });
   tx();
   res.status(204).send();
+});
+
+app.get('/api/laptops/:id/gatepasses', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'invalid id' });
+  const rows = db
+    .prepare('SELECT * FROM laptop_gatepasses WHERE laptop_id = ? ORDER BY id DESC')
+    .all(id);
+  res.json(rows);
+});
+
+app.post('/api/laptops/:id/gatepasses', (req, res) => {
+  const laptopId = parseInt(req.params.id, 10);
+  if (!Number.isInteger(laptopId)) return res.status(400).json({ error: 'invalid id' });
+  const laptop = getLaptopById(laptopId);
+  if (!laptop) return res.status(404).json({ error: 'laptop not found' });
+
+  const issuedTo = String(req.body?.issued_to || '').trim();
+  const purpose = String(req.body?.purpose || '').trim();
+  const outDate = String(req.body?.out_date || '').trim();
+  const expectedReturn = String(req.body?.expected_return_date || '').trim();
+  const approvedBy = String(req.body?.approved_by || '').trim();
+  const remarks = String(req.body?.remarks || '').trim();
+  if (!issuedTo || !purpose || !outDate) {
+    return res.status(400).json({ error: 'issued_to, purpose and out_date are required' });
+  }
+
+  const gatepassNo = nextLaptopGatepassNo();
+  const info = db
+    .prepare(
+      `INSERT INTO laptop_gatepasses (
+        gatepass_no, laptop_id, issued_to, purpose, out_date, expected_return_date,
+        approved_by, status, remarks, created_by
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'approved', ?, ?)`
+    )
+    .run(
+      gatepassNo,
+      laptopId,
+      issuedTo,
+      purpose,
+      outDate,
+      expectedReturn || null,
+      approvedBy || null,
+      remarks || null,
+      req.authUser?.username || 'system'
+    );
+  const created = db.prepare('SELECT * FROM laptop_gatepasses WHERE id = ?').get(info.lastInsertRowid);
+  insertAuditTrail({
+    entity_table: 'laptop_gatepasses',
+    entity_id: created.id,
+    action_type: 'CREATE',
+    previous_value: null,
+    new_value: JSON.stringify(created),
+    changed_by: req.authUser?.username || 'system',
+  });
+  res.status(201).json(created);
+});
+
+app.patch('/api/laptop-gatepasses/:id/status', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'invalid id' });
+  const prev = db.prepare('SELECT * FROM laptop_gatepasses WHERE id = ?').get(id);
+  if (!prev) return res.status(404).json({ error: 'gatepass not found' });
+  const nextStatus = String(req.body?.status || '').trim().toLowerCase();
+  const allowed = ['draft', 'approved', 'returned', 'cancelled'];
+  if (!allowed.includes(nextStatus)) {
+    return res.status(400).json({ error: `status must be one of: ${allowed.join(', ')}` });
+  }
+  db.prepare("UPDATE laptop_gatepasses SET status = ?, updated_at = datetime('now') WHERE id = ?").run(
+    nextStatus,
+    id
+  );
+  const next = db.prepare('SELECT * FROM laptop_gatepasses WHERE id = ?').get(id);
+  insertAuditTrail({
+    entity_table: 'laptop_gatepasses',
+    entity_id: id,
+    action_type: 'UPDATE',
+    previous_value: JSON.stringify(prev),
+    new_value: JSON.stringify(next),
+    changed_by: req.authUser?.username || 'system',
+  });
+  res.json(next);
+});
+
+app.get('/api/laptop-gatepasses/:id/print', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).send('invalid id');
+  const row = db
+    .prepare(
+      `SELECT g.*, l.service_tag, l.model, l.asset_owner, l.dept, l.location
+       FROM laptop_gatepasses g
+       LEFT JOIN laptops l ON l.id = g.laptop_id
+       WHERE g.id = ?`
+    )
+    .get(id);
+  if (!row) return res.status(404).send('gatepass not found');
+
+  const html = `<!doctype html>
+<html><head><meta charset="utf-8" /><title>Gate Pass ${row.gatepass_no}</title>
+<style>
+body{font-family:Segoe UI,Arial,sans-serif;padding:24px;color:#111}
+h1{margin:0 0 8px} table{border-collapse:collapse;width:100%;margin-top:12px}
+td,th{border:1px solid #222;padding:8px;text-align:left} .muted{color:#555}
+.sig{margin-top:32px;display:flex;justify-content:space-between}
+</style></head><body>
+<h1>Laptop Gate Pass</h1>
+<div class="muted">Gate Pass No: <strong>${row.gatepass_no}</strong></div>
+<div class="muted">Status: <strong>${row.status}</strong></div>
+<table>
+<tr><th>Service Tag</th><td>${row.service_tag || ''}</td><th>Model</th><td>${row.model || ''}</td></tr>
+<tr><th>Asset Owner</th><td>${row.asset_owner || ''}</td><th>Dept</th><td>${row.dept || ''}</td></tr>
+<tr><th>Location</th><td>${row.location || ''}</td><th>Issued To</th><td>${row.issued_to}</td></tr>
+<tr><th>Purpose</th><td>${row.purpose}</td><th>Out Date</th><td>${row.out_date}</td></tr>
+<tr><th>Expected Return</th><td>${row.expected_return_date || ''}</td><th>Approved By</th><td>${row.approved_by || ''}</td></tr>
+<tr><th>Remarks</th><td colspan="3">${row.remarks || ''}</td></tr>
+</table>
+<div class="sig"><div>Employee Signature: ____________</div><div>Authorizer: ____________</div></div>
+<script>window.onload=()=>window.print();</script>
+</body></html>`;
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(html);
 });
 
 app.get('/api/register/:table', (req, res) => {

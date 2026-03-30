@@ -258,6 +258,24 @@ function initSchema() {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS laptop_gatepasses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      gatepass_no TEXT NOT NULL UNIQUE,
+      laptop_id INTEGER NOT NULL REFERENCES laptops(id) ON DELETE CASCADE,
+      issued_to TEXT NOT NULL,
+      purpose TEXT NOT NULL,
+      out_date TEXT NOT NULL,
+      expected_return_date TEXT,
+      approved_by TEXT,
+      status TEXT NOT NULL DEFAULT 'draft',
+      remarks TEXT,
+      created_by TEXT NOT NULL DEFAULT 'system',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_laptop_gatepasses_laptop ON laptop_gatepasses(laptop_id);
   `);
 }
 
