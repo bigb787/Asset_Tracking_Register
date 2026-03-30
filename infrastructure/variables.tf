@@ -51,3 +51,21 @@ variable "app_port" {
   type        = number
   default     = 3000
 }
+
+variable "backup_bucket_name" {
+  description = "Optional S3 bucket name for SQLite backups. If null, a deterministic name is generated."
+  type        = string
+  default     = null
+}
+
+variable "backup_retention_days" {
+  description = "Retention period in days for S3 database backups."
+  type        = number
+  default     = 30
+}
+
+variable "backup_schedule_cron" {
+  description = "Cron schedule for backup script on EC2."
+  type        = string
+  default     = "30 2 * * *"
+}

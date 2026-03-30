@@ -22,3 +22,8 @@ output "ami_used" {
   description = "Resolved Ubuntu 24.04 AMI ID"
   value       = data.aws_ami.ubuntu_noble.id
 }
+
+output "backup_bucket_name" {
+  description = "S3 bucket used for SQLite backups"
+  value       = aws_s3_bucket.backup.bucket
+}

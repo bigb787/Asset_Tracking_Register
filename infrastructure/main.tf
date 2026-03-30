@@ -29,7 +29,14 @@ data "aws_ami" "ubuntu_noble" {
   }
 }
 
+data "aws_caller_identity" "current" {}
+
 locals {
+  backup_bucket = coalesce(
+    var.backup_bucket_name,
+    "asset-register-backups-${data.aws_caller_identity.current.account_id}-${var.aws_region}"
+  )
+
   user_data = <<-EOF
 #!/bin/bash
 set -euxo pipefail
@@ -39,9 +46,10 @@ APP_DIR="/opt/asset-register"
 REPO_URL="${var.app_repo_url}"
 REPO_BRANCH="${var.app_repo_branch}"
 APP_PORT="${var.app_port}"
+BACKUP_BUCKET="${local.backup_bucket}"
 
 apt-get update
-apt-get install -y ca-certificates curl gnupg git nginx build-essential python3
+apt-get install -y ca-certificates curl gnupg git nginx build-essential python3 sqlite3 gzip unzip
 
 # Ensure SSM is running (usually preinstalled, but safe to restart).
 systemctl restart amazon-ssm-agent || true
@@ -49,6 +57,10 @@ systemctl restart amazon-ssm-agent || true
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
 apt-get install -y nodejs
 npm install -g pm2
+
+curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
+unzip -o /tmp/awscliv2.zip -d /tmp
+/tmp/aws/install --update
 
 rm -rf "$APP_DIR"
 git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" "$APP_DIR" || git clone --depth 1 "$REPO_URL" "$APP_DIR"
@@ -95,6 +107,30 @@ systemctl restart nginx
 node --version
 npm --version
 pm2 --version
+
+# Daily DB backup to S3
+cat > /usr/local/bin/backup-asset-db.sh <<'BKP'
+#!/bin/bash
+set -euo pipefail
+DB_PATH="/opt/asset-register/data/asset_register.sqlite"
+TMP_DIR="/tmp/asset-register-backup"
+BACKUP_BUCKET="${local.backup_bucket}"
+STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+mkdir -p "$TMP_DIR"
+if [ ! -f "$DB_PATH" ]; then
+  echo "Database file not found: $DB_PATH"
+  exit 1
+fi
+sqlite3 "$DB_PATH" ".backup '$TMP_DIR/asset_register_$${STAMP}.sqlite'"
+gzip -f "$TMP_DIR/asset_register_$${STAMP}.sqlite"
+aws s3 cp "$TMP_DIR/asset_register_$${STAMP}.sqlite.gz" "s3://$BACKUP_BUCKET/sqlite/asset_register_$${STAMP}.sqlite.gz"
+rm -f "$TMP_DIR"/asset_register_*.sqlite.gz
+BKP
+
+chmod +x /usr/local/bin/backup-asset-db.sh
+echo "${var.backup_schedule_cron} root /usr/local/bin/backup-asset-db.sh >> /var/log/asset-register-backup.log 2>&1" > /etc/cron.d/asset-register-backup
+chmod 644 /etc/cron.d/asset-register-backup
+systemctl restart cron
 EOF
 }
 
@@ -163,6 +199,86 @@ resource "aws_iam_role" "ec2_ssm_role" {
 resource "aws_iam_role_policy_attachment" "ec2_ssm_core" {
   role       = aws_iam_role.ec2_ssm_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_role_policy" "ec2_backup_s3_policy" {
+  name = "asset-register-ec2-backup-s3-policy"
+  role = aws_iam_role.ec2_ssm_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = ["s3:PutObject", "s3:AbortMultipartUpload"]
+        Resource = "arn:aws:s3:::${local.backup_bucket}/sqlite/*"
+      },
+      {
+        Effect = "Allow"
+        Action = ["s3:ListBucket"]
+        Resource = "arn:aws:s3:::${local.backup_bucket}"
+      }
+    ]
+  })
+}
+
+resource "aws_s3_bucket" "backup" {
+  bucket        = local.backup_bucket
+  force_destroy = false
+
+  tags = {
+    Name    = local.backup_bucket
+    Project = "asset-register"
+    Purpose = "db-backup"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "backup" {
+  bucket = aws_s3_bucket.backup.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_versioning" "backup" {
+  bucket = aws_s3_bucket.backup.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "backup" {
+  bucket = aws_s3_bucket.backup.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "backup" {
+  bucket = aws_s3_bucket.backup.id
+
+  rule {
+    id     = "expire-old-backups"
+    status = "Enabled"
+
+    filter {
+      prefix = "sqlite/"
+    }
+
+    expiration {
+      days = var.backup_retention_days
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = var.backup_retention_days
+    }
+  }
 }
 
 resource "aws_iam_instance_profile" "ec2_ssm_profile" {
