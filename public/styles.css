@@ -196,17 +196,6 @@ textarea {
   border-bottom: none;
 }
 
-.actions-col {
-  position: sticky;
-  right: 0;
-  background: #121a24;
-  z-index: 1;
-}
-
-.data-table td.actions-col {
-  background: #172232;
-}
-
 .row-actions {
   display: flex;
   gap: 0.35rem;

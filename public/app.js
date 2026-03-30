@@ -205,9 +205,9 @@ async function loadCurrentTable() {
   const rows = await fetchJSON(`/api/register/${currentTable.key}`);
   const head = $('#data-head');
   const body = $('#data-rows');
-  head.innerHTML = `<tr>${currentTable.fields
+  head.innerHTML = `<tr><th>Actions</th>${currentTable.fields
     .map(([, label]) => `<th>${escapeHtml(label)}</th>`)
-    .join('')}<th class="actions-col">Actions</th></tr>`;
+    .join('')}</tr>`;
   body.innerHTML = rows
     .map((r) => {
       const cols = currentTable.fields
@@ -218,13 +218,13 @@ async function loadCurrentTable() {
           ? `<button class="btn secondary row-gatepass" data-id="${r.id}">Gate Pass</button>
              <button class="btn secondary row-gatepass-history" data-id="${r.id}">Gate Passes</button>`
           : '';
-      return `<tr>${cols}<td class="actions-col">
+      return `<tr><td>
         <div class="row-actions">
           ${laptopGateBtn}
           <button class="btn secondary row-edit" data-id="${r.id}">Edit</button>
           <button class="btn danger row-delete" data-id="${r.id}">Delete</button>
         </div>
-      </td></tr>`;
+      </td>${cols}</tr>`;
     })
     .join('');
   body.querySelectorAll('.row-edit').forEach((btn) => {
