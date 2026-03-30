@@ -200,13 +200,11 @@ async function loadCurrentTable() {
   const head = $('#data-head');
   const body = $('#data-rows');
   head.innerHTML = `<tr>${currentTable.fields
-    .slice(0, 8)
     .map(([, label]) => `<th>${escapeHtml(label)}</th>`)
     .join('')}<th>Actions</th></tr>`;
   body.innerHTML = rows
     .map((r) => {
       const cols = currentTable.fields
-        .slice(0, 8)
         .map(([k]) => `<td>${escapeHtml(r[k] ?? '—')}</td>`)
         .join('');
       return `<tr>${cols}<td><button class="btn danger row-delete" data-id="${r.id}">Delete</button></td></tr>`;
