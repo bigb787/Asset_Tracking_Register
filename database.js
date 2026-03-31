@@ -321,5 +321,6 @@ ensureColumn('laptop_gatepasses', 'usb_extender', 'TEXT');
 ensureColumn('laptop_gatepasses', 'authority_signatory', 'TEXT');
 ensureColumn('laptop_gatepasses', 'security_signatory', 'TEXT');
 ensureColumn('laptop_gatepasses', 'user_signatory', 'TEXT');
+ensureColumn('laptop_gatepasses', 'gatepass_type', 'TEXT');
 
 module.exports = { db, insertAuditTrail };

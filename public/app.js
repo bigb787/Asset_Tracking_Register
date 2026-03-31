@@ -193,6 +193,15 @@ function renderGatepassInput(key, value) {
       )
       .join('')}</select>`;
   }
+  if (key === 'gatepass_type') {
+    const types = ['temporary', 'permanent'];
+    return `<select class="row-edit-input" data-key="gatepass_type">${types
+      .map(
+        (type) =>
+          `<option value="${type}"${String(value || '').toLowerCase() === type ? ' selected' : ''}>${type}</option>`
+      )
+      .join('')}</select>`;
+  }
   return `<input class="row-edit-input" data-key="${escapeHtml(key)}" value="${escapeHtml(value ?? '')}" />`;
 }
 
@@ -212,6 +221,7 @@ function renderTableSelector() {
 function renderDynamicForm() {
   $('#table-title').textContent = currentTable.label;
   $('#history-title').textContent = `${currentTable.label} History`;
+  $('#history-panel').open = false;
   if (currentTable.key === 'laptops') {
     $('#gatepass-panel').classList.remove('hidden');
   } else {
@@ -322,6 +332,7 @@ async function loadGatePasses() {
         <td>${escapeHtml(g.service_tag || '—')}</td>
         <td>${renderGatepassInput('issued_to', g.issued_to)}</td>
         <td>${renderGatepassInput('out_date', g.out_date)}</td>
+        <td>${renderGatepassInput('gatepass_type', g.gatepass_type || 'temporary')}</td>
         <td>${renderGatepassInput('status', g.status)}</td>
       `
         : `
@@ -330,6 +341,7 @@ async function loadGatePasses() {
         <td>${escapeHtml(g.service_tag || '—')}</td>
         <td>${escapeHtml(g.issued_to || '—')}</td>
         <td>${escapeHtml(g.out_date || '—')}</td>
+        <td>${escapeHtml(g.gatepass_type || 'temporary')}</td>
         <td>${escapeHtml(g.status || '—')}</td>
       `;
       const actions = isEditing
@@ -529,6 +541,7 @@ async function onCreateLaptopGatepass(ev) {
     alert(`Gate pass created: ${gp.gatepass_no}`);
     $('#gatepass-form').reset();
     $('#gp-out-date').value = new Date().toISOString().slice(0, 10);
+    $('#gp-type').value = 'temporary';
     await loadGatePasses();
   } catch (err) {
     alert(err.message);
@@ -626,6 +639,7 @@ async function bootstrap() {
       fillGatepassFromServiceTag(ev.target.value);
     });
     $('#gp-out-date').value = new Date().toISOString().slice(0, 10);
+    $('#gp-type').value = 'temporary';
     await refresh();
   } catch (_e) {
     showLogin();

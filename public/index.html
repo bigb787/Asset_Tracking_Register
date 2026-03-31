@@ -70,6 +70,12 @@
         <label>Approved By
           <input id="gp-approved-by" name="approved_by" />
         </label>
+        <label>Gate Pass Type
+          <select id="gp-type" name="gatepass_type">
+            <option value="temporary">Temporary</option>
+            <option value="permanent">Permanent</option>
+          </select>
+        </label>
         <label>Keyboard
           <input id="gp-keyboard" name="keyboard" />
         </label>
@@ -133,6 +139,7 @@
               <th>Service Tag</th>
               <th>Issued To</th>
               <th>Out Date</th>
+              <th>Type</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
@@ -143,8 +150,11 @@
     </section>
 
     <section class="card full-width">
-      <h2 id="history-title">Recent Record History</h2>
-      <ul id="audit-list" class="audit"></ul>
+      <details id="history-panel">
+        <summary id="history-title">Recent Record History</summary>
+        <p class="hint">Open this only when you want to review who added, updated, or deleted records.</p>
+        <ul id="audit-list" class="audit"></ul>
+      </details>
     </section>
   </main>
 

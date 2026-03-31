@@ -666,6 +666,7 @@ app.get('/api/export/gatepasses.xlsx', async (req, res) => {
     { header: 'Out Date', key: 'out_date', width: 14 },
     { header: 'Expected Return Date', key: 'expected_return_date', width: 18 },
     { header: 'Approved By', key: 'approved_by', width: 18 },
+    { header: 'Gate Pass Type', key: 'gatepass_type', width: 18 },
     { header: 'Status', key: 'status', width: 14 },
     { header: 'Keyboard', key: 'keyboard', width: 16 },
     { header: 'Mouse', key: 'mouse', width: 16 },
@@ -700,6 +701,7 @@ function createLaptopGatepass(laptop, body, authUser) {
   const outDate = String(body?.out_date || '').trim();
   const expectedReturn = String(body?.expected_return_date || '').trim();
   const approvedBy = String(body?.approved_by || '').trim();
+  const gatepassType = String(body?.gatepass_type || 'temporary').trim().toLowerCase();
   const remarks = String(body?.remarks || '').trim();
   const keyboard = String(body?.keyboard || laptop.keyboard || '').trim();
   const mouse = String(body?.mouse || laptop.mouse || '').trim();
@@ -711,14 +713,17 @@ function createLaptopGatepass(laptop, body, authUser) {
   if (!issuedTo || !purpose || !outDate) {
     return { error: 'issued_to, purpose and out_date are required' };
   }
+  if (!['temporary', 'permanent'].includes(gatepassType)) {
+    return { error: 'gatepass_type must be temporary or permanent' };
+  }
   const gatepassNo = nextLaptopGatepassNo();
   const info = db
     .prepare(
       `INSERT INTO laptop_gatepasses (
         gatepass_no, laptop_id, issued_to, purpose, out_date, expected_return_date,
         approved_by, status, remarks, created_by, keyboard, mouse, headphone, usb_extender,
-        authority_signatory, security_signatory, user_signatory
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'approved', ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        authority_signatory, security_signatory, user_signatory, gatepass_type
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'approved', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       gatepassNo,
@@ -736,7 +741,8 @@ function createLaptopGatepass(laptop, body, authUser) {
       usbExtender || null,
       authoritySignatory || null,
       securitySignatory || null,
-      userSignatory || null
+      userSignatory || null,
+      gatepassType
     );
   const created = db.prepare('SELECT * FROM laptop_gatepasses WHERE id = ?').get(info.lastInsertRowid);
   insertAuditTrail({
@@ -808,6 +814,7 @@ app.patch('/api/laptop-gatepasses/:id', (req, res) => {
     'out_date',
     'expected_return_date',
     'approved_by',
+    'gatepass_type',
     'status',
     'remarks',
     'keyboard',
@@ -835,6 +842,14 @@ app.patch('/api/laptop-gatepasses/:id', (req, res) => {
       return res.status(400).json({ error: `status must be one of: ${allowedStatuses.join(', ')}` });
     }
     patch.status = nextStatus;
+  }
+  if (patch.gatepass_type != null) {
+    const nextType = String(patch.gatepass_type).trim().toLowerCase();
+    const allowedTypes = ['temporary', 'permanent'];
+    if (!allowedTypes.includes(nextType)) {
+      return res.status(400).json({ error: `gatepass_type must be one of: ${allowedTypes.join(', ')}` });
+    }
+    patch.gatepass_type = nextType;
   }
   const sets = Object.keys(patch)
     .map((key) => `${key} = @${key}`)
@@ -893,6 +908,7 @@ td,th{border:1px solid #222;padding:8px;text-align:left} .muted{color:#555}
 </style></head><body>
 <h1>Laptop Gate Pass</h1>
 <div class="muted">Gate Pass No: <strong>${row.gatepass_no}</strong></div>
+<div class="muted">Type: <strong>${row.gatepass_type || ''}</strong></div>
 <div class="muted">Status: <strong>${row.status}</strong></div>
 <table>
 <tr><th>Service Tag</th><td>${row.service_tag || ''}</td><th>Model</th><td>${row.model || ''}</td></tr>
@@ -941,6 +957,7 @@ app.get('/api/laptop-gatepasses/:id/pdf', (req, res) => {
     `Out Date: ${row.out_date || ''}`,
     `Expected Return: ${row.expected_return_date || ''}`,
     `Approved By: ${row.approved_by || ''}`,
+    `Gate Pass Type: ${row.gatepass_type || ''}`,
     `Keyboard: ${row.keyboard || ''}`,
     `Mouse: ${row.mouse || ''}`,
     `HeadPhone: ${row.headphone || ''}`,
