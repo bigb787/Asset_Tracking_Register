@@ -314,5 +314,9 @@ function insertAuditTrail(row) {
 
 initSchema();
 ensureColumn('laptops', 'free_note', 'TEXT');
+ensureColumn('laptop_gatepasses', 'keyboard', 'TEXT');
+ensureColumn('laptop_gatepasses', 'mouse', 'TEXT');
+ensureColumn('laptop_gatepasses', 'headphone', 'TEXT');
+ensureColumn('laptop_gatepasses', 'usb_extender', 'TEXT');
 
 module.exports = { db, insertAuditTrail };

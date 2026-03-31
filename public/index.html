@@ -50,7 +50,47 @@
     </section>
 
     <section id="gatepass-panel" class="card full-width hidden">
-      <h2>Laptop Gate Pass History</h2>
+      <h2>Laptop Gate Pass</h2>
+      <form id="gatepass-form" class="form-grid">
+        <label>Service Tag
+          <input id="gp-service-tag" name="service_tag" required />
+        </label>
+        <label>User Name
+          <input id="gp-issued-to" name="issued_to" required />
+        </label>
+        <label>Purpose
+          <input id="gp-purpose" name="purpose" value="Official work" required />
+        </label>
+        <label>Out Date
+          <input id="gp-out-date" name="out_date" type="date" required />
+        </label>
+        <label>Expected Return Date
+          <input id="gp-expected-return" name="expected_return_date" type="date" />
+        </label>
+        <label>Approved By
+          <input id="gp-approved-by" name="approved_by" />
+        </label>
+        <label>Keyboard
+          <input id="gp-keyboard" name="keyboard" />
+        </label>
+        <label>Mouse
+          <input id="gp-mouse" name="mouse" />
+        </label>
+        <label>HeadPhone
+          <input id="gp-headphone" name="headphone" />
+        </label>
+        <label>USB Extender
+          <input id="gp-usb-extender" name="usb_extender" />
+        </label>
+        <label class="full">Remarks
+          <input id="gp-remarks" name="remarks" />
+        </label>
+        <div class="form-actions-bar">
+          <button type="submit" class="btn">Create Gate Pass</button>
+          <button id="gp-form-clear-btn" type="reset" class="btn secondary">Clear Gate Pass Form</button>
+        </div>
+      </form>
+      <h3>All Created Gate Passes</h3>
       <div class="form-grid">
         <label>Status
           <select id="gp-status-filter">
@@ -72,7 +112,6 @@
         </label>
         <button id="gp-refresh-btn" type="button" class="btn">Refresh Gate Passes</button>
         <button id="gp-clear-btn" type="button" class="btn secondary">Clear Filters</button>
-        <button id="gp-add-btn" type="button" class="btn">Add New Gate Pass</button>
       </div>
       <div id="gp-badges" class="badge-row"></div>
       <div class="table-wrap">
@@ -94,7 +133,7 @@
     </section>
 
     <section class="card full-width">
-      <h2>Recent asset audit (updates & deletes)</h2>
+      <h2 id="history-title">Recent Record History</h2>
       <ul id="audit-list" class="audit"></ul>
     </section>
   </main>

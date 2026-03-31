@@ -145,6 +145,10 @@ function laptopExistsByServiceTag(tag, excludeId) {
   return !!row;
 }
 
+function getLaptopByServiceTag(serviceTag) {
+  return db.prepare('SELECT * FROM laptops WHERE service_tag = ?').get(serviceTag);
+}
+
 function nextLaptopGatepassNo() {
   const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   const like = `GP-LAP-${datePart}-%`;
@@ -587,40 +591,42 @@ app.get('/api/laptop-gatepasses', (req, res) => {
   res.json(rows);
 });
 
-app.post('/api/laptops/:id/gatepasses', (req, res) => {
-  const laptopId = parseInt(req.params.id, 10);
-  if (!Number.isInteger(laptopId)) return res.status(400).json({ error: 'invalid id' });
-  const laptop = getLaptopById(laptopId);
-  if (!laptop) return res.status(404).json({ error: 'laptop not found' });
-
-  const issuedTo = String(req.body?.issued_to || '').trim();
-  const purpose = String(req.body?.purpose || '').trim();
-  const outDate = String(req.body?.out_date || '').trim();
-  const expectedReturn = String(req.body?.expected_return_date || '').trim();
-  const approvedBy = String(req.body?.approved_by || '').trim();
-  const remarks = String(req.body?.remarks || '').trim();
+function createLaptopGatepass(laptop, body, authUser) {
+  const issuedTo = String(body?.issued_to || '').trim();
+  const purpose = String(body?.purpose || '').trim();
+  const outDate = String(body?.out_date || '').trim();
+  const expectedReturn = String(body?.expected_return_date || '').trim();
+  const approvedBy = String(body?.approved_by || '').trim();
+  const remarks = String(body?.remarks || '').trim();
+  const keyboard = String(body?.keyboard || laptop.keyboard || '').trim();
+  const mouse = String(body?.mouse || laptop.mouse || '').trim();
+  const headphone = String(body?.headphone || laptop.headphone || '').trim();
+  const usbExtender = String(body?.usb_extender || laptop.usb_extender || '').trim();
   if (!issuedTo || !purpose || !outDate) {
-    return res.status(400).json({ error: 'issued_to, purpose and out_date are required' });
+    return { error: 'issued_to, purpose and out_date are required' };
   }
-
   const gatepassNo = nextLaptopGatepassNo();
   const info = db
     .prepare(
       `INSERT INTO laptop_gatepasses (
         gatepass_no, laptop_id, issued_to, purpose, out_date, expected_return_date,
-        approved_by, status, remarks, created_by
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'approved', ?, ?)`
+        approved_by, status, remarks, created_by, keyboard, mouse, headphone, usb_extender
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'approved', ?, ?, ?, ?, ?, ?)`
     )
     .run(
       gatepassNo,
-      laptopId,
+      laptop.id,
       issuedTo,
       purpose,
       outDate,
       expectedReturn || null,
       approvedBy || null,
       remarks || null,
-      req.authUser?.username || 'system'
+      authUser?.username || 'system',
+      keyboard || null,
+      mouse || null,
+      headphone || null,
+      usbExtender || null
     );
   const created = db.prepare('SELECT * FROM laptop_gatepasses WHERE id = ?').get(info.lastInsertRowid);
   insertAuditTrail({
@@ -629,9 +635,29 @@ app.post('/api/laptops/:id/gatepasses', (req, res) => {
     action_type: 'CREATE',
     previous_value: null,
     new_value: JSON.stringify(created),
-    changed_by: req.authUser?.username || 'system',
+    changed_by: authUser?.username || 'system',
   });
-  res.status(201).json(created);
+  return { created };
+}
+
+app.post('/api/laptops/:id/gatepasses', (req, res) => {
+  const laptopId = parseInt(req.params.id, 10);
+  if (!Number.isInteger(laptopId)) return res.status(400).json({ error: 'invalid id' });
+  const laptop = getLaptopById(laptopId);
+  if (!laptop) return res.status(404).json({ error: 'laptop not found' });
+  const result = createLaptopGatepass(laptop, req.body, req.authUser);
+  if (result.error) return res.status(400).json({ error: result.error });
+  res.status(201).json(result.created);
+});
+
+app.post('/api/laptop-gatepasses', (req, res) => {
+  const serviceTag = String(req.body?.service_tag || '').trim();
+  if (!serviceTag) return res.status(400).json({ error: 'service_tag is required' });
+  const laptop = getLaptopByServiceTag(serviceTag);
+  if (!laptop) return res.status(404).json({ error: 'laptop not found for service_tag' });
+  const result = createLaptopGatepass(laptop, req.body, req.authUser);
+  if (result.error) return res.status(400).json({ error: result.error });
+  res.status(201).json(result.created);
 });
 
 app.patch('/api/laptop-gatepasses/:id/status', (req, res) => {
@@ -690,6 +716,8 @@ td,th{border:1px solid #222;padding:8px;text-align:left} .muted{color:#555}
 <tr><th>Location</th><td>${row.location || ''}</td><th>Issued To</th><td>${row.issued_to}</td></tr>
 <tr><th>Purpose</th><td>${row.purpose}</td><th>Out Date</th><td>${row.out_date}</td></tr>
 <tr><th>Expected Return</th><td>${row.expected_return_date || ''}</td><th>Approved By</th><td>${row.approved_by || ''}</td></tr>
+<tr><th>Keyboard</th><td>${row.keyboard || ''}</td><th>Mouse</th><td>${row.mouse || ''}</td></tr>
+<tr><th>HeadPhone</th><td>${row.headphone || ''}</td><th>USB Extender</th><td>${row.usb_extender || ''}</td></tr>
 <tr><th>Remarks</th><td colspan="3">${row.remarks || ''}</td></tr>
 </table>
 <div class="sig"><div>Employee Signature: ____________</div><div>Authorizer: ____________</div></div>
@@ -731,6 +759,14 @@ app.post('/api/register/:table', (req, res) => {
   try {
     const info = db.prepare(`INSERT INTO ${table} (${cols}) VALUES (${placeholders})`).run(...values);
     const created = db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(info.lastInsertRowid);
+    insertAuditTrail({
+      entity_table: table,
+      entity_id: created.id,
+      action_type: 'CREATE',
+      previous_value: null,
+      new_value: JSON.stringify(created),
+      changed_by: req.authUser?.username || 'system',
+    });
     res.status(201).json(created);
   } catch (e) {
     const message = String(e.message || '');
@@ -872,7 +908,15 @@ app.get('/api/export/assets.xlsx', async (_req, res) => {
 
 app.get('/api/audit', (_req, res) => {
   const limit = Math.min(Number(_req.query.limit) || 100, 500);
-  const entries = db.prepare(`SELECT * FROM audit_trail ORDER BY id DESC LIMIT ?`).all(limit);
+  const table = String(_req.query.table || '').trim();
+  const clauses = [];
+  const params = [];
+  if (table) {
+    clauses.push('entity_table = ?');
+    params.push(table);
+  }
+  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+  const entries = db.prepare(`SELECT * FROM audit_trail ${where} ORDER BY id DESC LIMIT ?`).all(...params, limit);
   res.json(entries);
 });
 

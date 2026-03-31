@@ -146,8 +146,8 @@ async function fetchJSON(url, opts) {
 
 let activeUser = null;
 let currentTable = TABLES[0];
-let gatepassLaptopFilter = '';
 let editingRowId = null;
+let currentRows = [];
 
 function showLogin() {
   $('#login-view').classList.remove('hidden');
@@ -197,6 +197,7 @@ function renderTableSelector() {
 
 function renderDynamicForm() {
   $('#table-title').textContent = currentTable.label;
+  $('#history-title').textContent = `${currentTable.label} History`;
   if (currentTable.key === 'laptops') {
     $('#gatepass-panel').classList.remove('hidden');
   } else {
@@ -205,7 +206,7 @@ function renderDynamicForm() {
   const form = $('#dynamic-form');
   const rowActionHelp =
     currentTable.key === 'laptops'
-      ? 'After saving, each row will show Edit Row, Delete Row, Gate Pass, and Gate Passes.'
+      ? 'After saving, each row will show Edit Row and Delete Row in the first column.'
       : 'After saving, each row will show Edit Row and Delete Row in the first column.';
   const fieldsHtml = currentTable.fields
     .map(
@@ -232,6 +233,7 @@ function renderDynamicForm() {
 
 async function loadCurrentTable() {
   const rows = await fetchJSON(`/api/register/${currentTable.key}`);
+  currentRows = rows;
   const head = $('#data-head');
   const body = $('#data-rows');
   head.innerHTML = `<tr><th>Row Actions</th>${currentTable.fields
@@ -240,7 +242,7 @@ async function loadCurrentTable() {
   if (!rows.length) {
     const emptyMessage =
       currentTable.key === 'laptops'
-        ? 'No records yet. Add a Laptop record above, then Edit Row, Delete Row, and Gate Pass buttons will appear here.'
+        ? 'No records yet. Add a Laptop record above, then Edit Row and Delete Row buttons will appear here.'
         : `No records yet. Add a ${escapeHtml(currentTable.label)} record above, then Edit Row and Delete Row buttons will appear here.`;
     body.innerHTML = `<tr><td colspan="${currentTable.fields.length + 1}" class="empty-state">${emptyMessage}</td></tr>`;
     return;
@@ -254,17 +256,11 @@ async function loadCurrentTable() {
             : `<td>${escapeHtml(normalizeDisplayValue(r[k]))}</td>`
         )
         .join('');
-      const laptopGateBtn =
-        currentTable.key === 'laptops'
-          ? `<button class="btn secondary row-gatepass" data-id="${r.id}">Gate Pass</button>
-             <button class="btn secondary row-gatepass-history" data-id="${r.id}">Gate Passes</button>`
-          : '';
       const actionButtons =
         editingRowId === r.id
           ? `<button class="btn row-save" data-id="${r.id}">Save Changes</button>
              <button class="btn secondary row-cancel" data-id="${r.id}">Cancel</button>`
-          : `${laptopGateBtn}
-             <button class="btn secondary row-edit" data-id="${r.id}">Edit Row</button>
+          : `<button class="btn secondary row-edit" data-id="${r.id}">Edit Row</button>
              <button class="btn danger row-delete" data-id="${r.id}">Delete Row</button>`;
       return `<tr><td>
         <div class="row-actions">
@@ -284,12 +280,6 @@ async function loadCurrentTable() {
   });
   body.querySelectorAll('.row-delete').forEach((btn) => {
     btn.addEventListener('click', onDeleteRow);
-  });
-  body.querySelectorAll('.row-gatepass').forEach((btn) => {
-    btn.addEventListener('click', onCreateLaptopGatepass);
-  });
-  body.querySelectorAll('.row-gatepass-history').forEach((btn) => {
-    btn.addEventListener('click', onViewLaptopGatepassHistory);
   });
 }
 
@@ -356,12 +346,12 @@ function renderGatepassBadges(rows) {
 }
 
 async function loadAudit() {
-  const entries = await fetchJSON('/api/audit?limit=20');
+  const entries = await fetchJSON(`/api/audit?limit=20&table=${encodeURIComponent(currentTable.key)}`);
   $('#audit-list').innerHTML = entries.length
     ? entries
         .map(
           (e) =>
-            `<li><strong>${escapeHtml(e.action_type)}</strong> asset #${e.entity_id} at ${escapeHtml(
+            `<li><strong>${escapeHtml(e.action_type)}</strong> record #${e.entity_id} at ${escapeHtml(
               e.timestamp
             )} — changed_by ${escapeHtml(e.changed_by)}</li>`
         )
@@ -474,58 +464,33 @@ async function onCancelEdit() {
   await loadCurrentTable();
 }
 
-async function onCreateLaptopGatepass(ev) {
-  const laptopId = ev.target.getAttribute('data-id');
-  const issuedTo = prompt('Issued To (required):');
-  if (!issuedTo) return;
-  const purpose = prompt('Purpose (required):');
-  if (!purpose) return;
-  const outDate = prompt('Out Date (YYYY-MM-DD, required):', new Date().toISOString().slice(0, 10));
-  if (!outDate) return;
-  const expectedReturnDate = prompt('Expected Return Date (YYYY-MM-DD, optional):', '');
-  const approvedBy = prompt('Approved By (optional):', '');
-  const remarks = prompt('Remarks (optional):', '');
+function fillGatepassFromServiceTag(serviceTag) {
+  const laptop = currentRows.find((row) => String(row.service_tag || '').trim() === String(serviceTag || '').trim());
+  if (!laptop) return;
+  $('#gp-keyboard').value = laptop.keyboard || '';
+  $('#gp-mouse').value = laptop.mouse || '';
+  $('#gp-headphone').value = laptop.headphone || '';
+  $('#gp-usb-extender').value = laptop.usb_extender || '';
+}
 
+async function onCreateLaptopGatepass(ev) {
+  ev.preventDefault();
+  const fd = new FormData($('#gatepass-form'));
+  const body = Object.fromEntries(fd.entries());
   try {
-    const gp = await fetchJSON(`/api/laptops/${laptopId}/gatepasses`, {
+    const gp = await fetchJSON('/api/laptop-gatepasses', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        issued_to: issuedTo,
-        purpose,
-        out_date: outDate,
-        expected_return_date: expectedReturnDate || null,
-        approved_by: approvedBy || null,
-        remarks: remarks || null,
-      }),
+      body: JSON.stringify(body),
     });
     window.open(`/api/laptop-gatepasses/${gp.id}/print`, '_blank');
     alert(`Gate pass created: ${gp.gatepass_no}`);
+    $('#gatepass-form').reset();
+    $('#gp-out-date').value = new Date().toISOString().slice(0, 10);
     await loadGatePasses();
   } catch (err) {
     alert(err.message);
   }
-}
-
-function onViewLaptopGatepassHistory(ev) {
-  gatepassLaptopFilter = ev.target.getAttribute('data-id') || '';
-  $('#gp-laptop-filter').value = gatepassLaptopFilter;
-  loadGatePasses().catch((e) => console.error(e));
-}
-
-async function onAddGatePass() {
-  const laptopId =
-    ($('#gp-laptop-filter').value || '').trim() ||
-    prompt('Laptop ID for new gate pass (required):', '');
-  if (!laptopId) return;
-  const fakeEvent = {
-    target: {
-      getAttribute(name) {
-        return name === 'data-id' ? laptopId : null;
-      },
-    },
-  };
-  await onCreateLaptopGatepass(fakeEvent);
 }
 
 async function onMarkReturned(ev) {
@@ -561,7 +526,6 @@ async function bootstrap() {
       $('#gp-laptop-filter').value = '';
       $('#gp-out-date-from').value = '';
       $('#gp-out-date-to').value = '';
-      gatepassLaptopFilter = '';
       loadGatePasses().catch((e) => console.error(e));
     });
     $('#gp-laptop-filter').addEventListener('change', () => {
@@ -573,9 +537,13 @@ async function bootstrap() {
     $('#gp-out-date-to').addEventListener('change', () => {
       loadGatePasses().catch((e) => console.error(e));
     });
-    $('#gp-add-btn').addEventListener('click', () => {
-      onAddGatePass().catch((e) => console.error(e));
+    $('#gatepass-form').addEventListener('submit', (ev) => {
+      onCreateLaptopGatepass(ev).catch((e) => console.error(e));
     });
+    $('#gp-service-tag').addEventListener('change', (ev) => {
+      fillGatepassFromServiceTag(ev.target.value);
+    });
+    $('#gp-out-date').value = new Date().toISOString().slice(0, 10);
     await refresh();
   } catch (_e) {
     showLogin();
