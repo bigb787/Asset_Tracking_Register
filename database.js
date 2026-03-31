@@ -279,6 +279,14 @@ function initSchema() {
   `);
 }
 
+function ensureColumn(tableName, columnName, definition) {
+  const columns = db.prepare(`PRAGMA table_info(${tableName})`).all();
+  const exists = columns.some((column) => column.name === columnName);
+  if (!exists) {
+    db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
+  }
+}
+
 /**
  * @param {{
  *   entity_table: string;
@@ -305,5 +313,6 @@ function insertAuditTrail(row) {
 }
 
 initSchema();
+ensureColumn('laptops', 'free_note', 'TEXT');
 
 module.exports = { db, insertAuditTrail };

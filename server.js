@@ -728,9 +728,20 @@ app.post('/api/register/:table', (req, res) => {
   const cols = keys.join(', ');
   const placeholders = keys.map(() => '?').join(', ');
   const values = keys.map((k) => row[k]);
-  const info = db.prepare(`INSERT INTO ${table} (${cols}) VALUES (${placeholders})`).run(...values);
-  const created = db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(info.lastInsertRowid);
-  res.status(201).json(created);
+  try {
+    const info = db.prepare(`INSERT INTO ${table} (${cols}) VALUES (${placeholders})`).run(...values);
+    const created = db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(info.lastInsertRowid);
+    res.status(201).json(created);
+  } catch (e) {
+    const message = String(e.message || '');
+    if (message.includes('UNIQUE constraint failed')) {
+      return res.status(409).json({ error: 'record must be unique for required fields' });
+    }
+    if (message.includes('has no column named')) {
+      return res.status(400).json({ error: message });
+    }
+    throw e;
+  }
 });
 
 app.patch('/api/register/:table/:id', (req, res) => {
