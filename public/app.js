@@ -192,20 +192,31 @@ function renderDynamicForm() {
     $('#gatepass-panel').classList.add('hidden');
   }
   const form = $('#dynamic-form');
-  form.innerHTML = currentTable.fields
+  const fieldsHtml = currentTable.fields
     .map(
       ([key, label]) =>
         `<label>${escapeHtml(label)}<input name="${escapeHtml(key)}" /></label>`
     )
     .join('');
-  form.insertAdjacentHTML('beforeend', '<button type="submit" class="btn">Add record</button>');
+  form.innerHTML = `
+    <div class="form-actions-bar">
+      <button type="submit" class="btn">Save New Record</button>
+      <button type="reset" class="btn secondary">Clear Form</button>
+      <span class="form-help">Fill the fields and click Save New Record.</span>
+    </div>
+    ${fieldsHtml}
+    <div class="form-actions-bar">
+      <button type="submit" class="btn">Save New Record</button>
+      <button type="reset" class="btn secondary">Clear Form</button>
+    </div>
+  `;
 }
 
 async function loadCurrentTable() {
   const rows = await fetchJSON(`/api/register/${currentTable.key}`);
   const head = $('#data-head');
   const body = $('#data-rows');
-  head.innerHTML = `<tr><th>Actions</th>${currentTable.fields
+  head.innerHTML = `<tr><th>Row Actions</th>${currentTable.fields
     .map(([, label]) => `<th>${escapeHtml(label)}</th>`)
     .join('')}</tr>`;
   if (!rows.length) {
@@ -225,8 +236,8 @@ async function loadCurrentTable() {
       return `<tr><td>
         <div class="row-actions">
           ${laptopGateBtn}
-          <button class="btn secondary row-edit" data-id="${r.id}">Edit</button>
-          <button class="btn danger row-delete" data-id="${r.id}">Delete</button>
+          <button class="btn secondary row-edit" data-id="${r.id}">Edit Row</button>
+          <button class="btn danger row-delete" data-id="${r.id}">Delete Row</button>
         </div>
       </td>${cols}</tr>`;
     })

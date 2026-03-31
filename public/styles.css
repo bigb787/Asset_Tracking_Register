@@ -95,6 +95,19 @@ body {
   grid-column: 1 / -1;
 }
 
+.form-actions-bar {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.form-help {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 input,
 select,
 textarea {
@@ -200,6 +213,8 @@ textarea {
   display: flex;
   gap: 0.35rem;
   align-items: center;
+  flex-wrap: wrap;
+  min-width: 260px;
 }
 
 .data-table select {
