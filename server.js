@@ -168,6 +168,35 @@ function nextLaptopGatepassNo() {
   return `GP-LAP-${datePart}-${String(seq).padStart(4, '0')}`;
 }
 
+function buildGatepassFilters(query) {
+  const status = String(query.status || '').trim().toLowerCase();
+  const laptopId = query.laptop_id ? parseInt(String(query.laptop_id), 10) : null;
+  const outDateFrom = String(query.out_date_from || '').trim();
+  const outDateTo = String(query.out_date_to || '').trim();
+  const clauses = [];
+  const params = [];
+  if (status && status !== 'all') {
+    clauses.push('g.status = ?');
+    params.push(status);
+  }
+  if (Number.isInteger(laptopId)) {
+    clauses.push('g.laptop_id = ?');
+    params.push(laptopId);
+  }
+  if (outDateFrom) {
+    clauses.push('g.out_date >= ?');
+    params.push(outDateFrom);
+  }
+  if (outDateTo) {
+    clauses.push('g.out_date <= ?');
+    params.push(outDateTo);
+  }
+  return {
+    where: clauses.length ? `WHERE ${clauses.join(' AND ')}` : '',
+    params,
+  };
+}
+
 const TABLE_CONFIG = {
   laptops: { uniqueField: 'service_tag' },
   desktops: { uniqueField: 'service_tag' },
@@ -555,29 +584,7 @@ app.get('/api/laptops/:id/gatepasses', (req, res) => {
 });
 
 app.get('/api/laptop-gatepasses', (req, res) => {
-  const status = String(req.query.status || '').trim().toLowerCase();
-  const laptopId = req.query.laptop_id ? parseInt(String(req.query.laptop_id), 10) : null;
-  const outDateFrom = String(req.query.out_date_from || '').trim();
-  const outDateTo = String(req.query.out_date_to || '').trim();
-  const clauses = [];
-  const params = [];
-  if (status && status !== 'all') {
-    clauses.push('g.status = ?');
-    params.push(status);
-  }
-  if (Number.isInteger(laptopId)) {
-    clauses.push('g.laptop_id = ?');
-    params.push(laptopId);
-  }
-  if (outDateFrom) {
-    clauses.push('g.out_date >= ?');
-    params.push(outDateFrom);
-  }
-  if (outDateTo) {
-    clauses.push('g.out_date <= ?');
-    params.push(outDateTo);
-  }
-  const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
+  const { where, params } = buildGatepassFilters(req.query);
   const rows = db
     .prepare(
       `SELECT g.*, l.service_tag, l.model, l.asset_owner
@@ -591,6 +598,61 @@ app.get('/api/laptop-gatepasses', (req, res) => {
   res.json(rows);
 });
 
+app.get('/api/export/gatepasses.xlsx', async (req, res) => {
+  const { where, params } = buildGatepassFilters(req.query);
+  const rows = db
+    .prepare(
+      `SELECT g.*, l.service_tag, l.model, l.asset_owner, l.dept, l.location
+       FROM laptop_gatepasses g
+       LEFT JOIN laptops l ON l.id = g.laptop_id
+       ${where}
+       ORDER BY g.id DESC`
+    )
+    .all(...params);
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'Asset Register';
+  const sheet = workbook.addWorksheet('Gate Passes', {
+    properties: { defaultColWidth: 18 },
+  });
+
+  sheet.columns = [
+    { header: 'Gate Pass No', key: 'gatepass_no', width: 20 },
+    { header: 'Service Tag', key: 'service_tag', width: 18 },
+    { header: 'Laptop ID', key: 'laptop_id', width: 12 },
+    { header: 'Issued To', key: 'issued_to', width: 20 },
+    { header: 'Purpose', key: 'purpose', width: 24 },
+    { header: 'Out Date', key: 'out_date', width: 14 },
+    { header: 'Expected Return Date', key: 'expected_return_date', width: 18 },
+    { header: 'Approved By', key: 'approved_by', width: 18 },
+    { header: 'Status', key: 'status', width: 14 },
+    { header: 'Keyboard', key: 'keyboard', width: 16 },
+    { header: 'Mouse', key: 'mouse', width: 16 },
+    { header: 'HeadPhone', key: 'headphone', width: 16 },
+    { header: 'USB Extender', key: 'usb_extender', width: 16 },
+    { header: 'Authority Signatory', key: 'authority_signatory', width: 20 },
+    { header: 'Security Signatory', key: 'security_signatory', width: 20 },
+    { header: 'User Signatory', key: 'user_signatory', width: 20 },
+    { header: 'Remarks', key: 'remarks', width: 24 },
+    { header: 'Asset Owner', key: 'asset_owner', width: 18 },
+    { header: 'Dept', key: 'dept', width: 14 },
+    { header: 'Location', key: 'location', width: 18 },
+    { header: 'Created By', key: 'created_by', width: 18 },
+    { header: 'Created At', key: 'created_at', width: 18 },
+  ];
+
+  rows.forEach((row) => sheet.addRow(row));
+  sheet.getRow(1).font = { bold: true };
+
+  res.setHeader(
+    'Content-Type',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  );
+  res.setHeader('Content-Disposition', 'attachment; filename="laptop-gatepasses.xlsx"');
+  await workbook.xlsx.write(res);
+  res.end();
+});
+
 function createLaptopGatepass(laptop, body, authUser) {
   const issuedTo = String(body?.issued_to || '').trim();
   const purpose = String(body?.purpose || '').trim();
@@ -602,6 +664,9 @@ function createLaptopGatepass(laptop, body, authUser) {
   const mouse = String(body?.mouse || laptop.mouse || '').trim();
   const headphone = String(body?.headphone || laptop.headphone || '').trim();
   const usbExtender = String(body?.usb_extender || laptop.usb_extender || '').trim();
+  const authoritySignatory = String(body?.authority_signatory || '').trim();
+  const securitySignatory = String(body?.security_signatory || '').trim();
+  const userSignatory = String(body?.user_signatory || '').trim();
   if (!issuedTo || !purpose || !outDate) {
     return { error: 'issued_to, purpose and out_date are required' };
   }
@@ -610,8 +675,9 @@ function createLaptopGatepass(laptop, body, authUser) {
     .prepare(
       `INSERT INTO laptop_gatepasses (
         gatepass_no, laptop_id, issued_to, purpose, out_date, expected_return_date,
-        approved_by, status, remarks, created_by, keyboard, mouse, headphone, usb_extender
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'approved', ?, ?, ?, ?, ?, ?)`
+        approved_by, status, remarks, created_by, keyboard, mouse, headphone, usb_extender,
+        authority_signatory, security_signatory, user_signatory
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'approved', ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       gatepassNo,
@@ -626,7 +692,10 @@ function createLaptopGatepass(laptop, body, authUser) {
       keyboard || null,
       mouse || null,
       headphone || null,
-      usbExtender || null
+      usbExtender || null,
+      authoritySignatory || null,
+      securitySignatory || null,
+      userSignatory || null
     );
   const created = db.prepare('SELECT * FROM laptop_gatepasses WHERE id = ?').get(info.lastInsertRowid);
   insertAuditTrail({
@@ -720,7 +789,11 @@ td,th{border:1px solid #222;padding:8px;text-align:left} .muted{color:#555}
 <tr><th>HeadPhone</th><td>${row.headphone || ''}</td><th>USB Extender</th><td>${row.usb_extender || ''}</td></tr>
 <tr><th>Remarks</th><td colspan="3">${row.remarks || ''}</td></tr>
 </table>
-<div class="sig"><div>Employee Signature: ____________</div><div>Authorizer: ____________</div></div>
+<div class="sig">
+<div>User Signatory: ${row.user_signatory || '____________'}</div>
+<div>Authority Signatory: ${row.authority_signatory || '____________'}</div>
+<div>Security Signatory: ${row.security_signatory || '____________'}</div>
+</div>
 <script>window.onload=()=>window.print();</script>
 </body></html>`;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');

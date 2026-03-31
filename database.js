@@ -318,5 +318,8 @@ ensureColumn('laptop_gatepasses', 'keyboard', 'TEXT');
 ensureColumn('laptop_gatepasses', 'mouse', 'TEXT');
 ensureColumn('laptop_gatepasses', 'headphone', 'TEXT');
 ensureColumn('laptop_gatepasses', 'usb_extender', 'TEXT');
+ensureColumn('laptop_gatepasses', 'authority_signatory', 'TEXT');
+ensureColumn('laptop_gatepasses', 'security_signatory', 'TEXT');
+ensureColumn('laptop_gatepasses', 'user_signatory', 'TEXT');
 
 module.exports = { db, insertAuditTrail };

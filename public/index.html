@@ -82,6 +82,15 @@
         <label>USB Extender
           <input id="gp-usb-extender" name="usb_extender" />
         </label>
+        <label>Authority Signatory
+          <input id="gp-authority-signatory" name="authority_signatory" />
+        </label>
+        <label>Security Signatory
+          <input id="gp-security-signatory" name="security_signatory" />
+        </label>
+        <label>User Signatory
+          <input id="gp-user-signatory" name="user_signatory" />
+        </label>
         <label class="full">Remarks
           <input id="gp-remarks" name="remarks" />
         </label>
@@ -110,6 +119,7 @@
         <label>Out Date To
           <input id="gp-out-date-to" type="date" />
         </label>
+        <a id="gp-export-link" class="btn secondary" href="/api/export/gatepasses.xlsx">Export Gate Passes to Excel</a>
         <button id="gp-refresh-btn" type="button" class="btn">Refresh Gate Passes</button>
         <button id="gp-clear-btn" type="button" class="btn secondary">Clear Filters</button>
       </div>

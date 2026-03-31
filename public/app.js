@@ -294,6 +294,7 @@ async function loadGatePasses() {
   if (laptopId) q.set('laptop_id', laptopId);
   if (outDateFrom) q.set('out_date_from', outDateFrom);
   if (outDateTo) q.set('out_date_to', outDateTo);
+  $('#gp-export-link').href = `/api/export/gatepasses.xlsx?${q.toString()}`;
   const rows = await fetchJSON(`/api/laptop-gatepasses?${q.toString()}`);
   renderGatepassBadges(rows);
   const tbody = $('#gp-rows');
@@ -526,6 +527,7 @@ async function bootstrap() {
       $('#gp-laptop-filter').value = '';
       $('#gp-out-date-from').value = '';
       $('#gp-out-date-to').value = '';
+      $('#gp-export-link').href = '/api/export/gatepasses.xlsx';
       loadGatePasses().catch((e) => console.error(e));
     });
     $('#gp-laptop-filter').addEventListener('change', () => {
