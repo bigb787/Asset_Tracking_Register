@@ -208,6 +208,10 @@ async function loadCurrentTable() {
   head.innerHTML = `<tr><th>Actions</th>${currentTable.fields
     .map(([, label]) => `<th>${escapeHtml(label)}</th>`)
     .join('')}</tr>`;
+  if (!rows.length) {
+    body.innerHTML = `<tr><td colspan="${currentTable.fields.length + 1}" class="empty-state">No records yet. Add a record above, then Edit/Delete/Gate Pass buttons will appear here.</td></tr>`;
+    return;
+  }
   body.innerHTML = rows
     .map((r) => {
       const cols = currentTable.fields
@@ -457,6 +461,21 @@ function onViewLaptopGatepassHistory(ev) {
   loadGatePasses().catch((e) => console.error(e));
 }
 
+async function onAddGatePass() {
+  const laptopId =
+    ($('#gp-laptop-filter').value || '').trim() ||
+    prompt('Laptop ID for new gate pass (required):', '');
+  if (!laptopId) return;
+  const fakeEvent = {
+    target: {
+      getAttribute(name) {
+        return name === 'data-id' ? laptopId : null;
+      },
+    },
+  };
+  await onCreateLaptopGatepass(fakeEvent);
+}
+
 async function onMarkReturned(ev) {
   const id = ev.target.getAttribute('data-id');
   if (!confirm('Mark this gate pass as returned?')) return;
@@ -501,6 +520,9 @@ async function bootstrap() {
     });
     $('#gp-out-date-to').addEventListener('change', () => {
       loadGatePasses().catch((e) => console.error(e));
+    });
+    $('#gp-add-btn').addEventListener('click', () => {
+      onAddGatePass().catch((e) => console.error(e));
     });
     await refresh();
   } catch (_e) {

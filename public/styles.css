@@ -242,3 +242,9 @@ textarea {
   color: var(--muted);
   background: #121a24;
 }
+
+.empty-state {
+  color: var(--muted);
+  text-align: center;
+  font-style: italic;
+}
