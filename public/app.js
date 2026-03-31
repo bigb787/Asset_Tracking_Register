@@ -192,6 +192,10 @@ function renderDynamicForm() {
     $('#gatepass-panel').classList.add('hidden');
   }
   const form = $('#dynamic-form');
+  const rowActionHelp =
+    currentTable.key === 'laptops'
+      ? 'After saving, each row will show Edit Row, Delete Row, Gate Pass, and Gate Passes.'
+      : 'After saving, each row will show Edit Row and Delete Row in the first column.';
   const fieldsHtml = currentTable.fields
     .map(
       ([key, label]) =>
@@ -203,6 +207,9 @@ function renderDynamicForm() {
       <button type="submit" class="btn">Save New Record</button>
       <button type="reset" class="btn secondary">Clear Form</button>
       <span class="form-help">Fill the fields and click Save New Record.</span>
+    </div>
+    <div class="form-actions-bar">
+      <span class="form-help">${escapeHtml(rowActionHelp)}</span>
     </div>
     ${fieldsHtml}
     <div class="form-actions-bar">
@@ -220,7 +227,11 @@ async function loadCurrentTable() {
     .map(([, label]) => `<th>${escapeHtml(label)}</th>`)
     .join('')}</tr>`;
   if (!rows.length) {
-    body.innerHTML = `<tr><td colspan="${currentTable.fields.length + 1}" class="empty-state">No records yet. Add a record above, then Edit/Delete/Gate Pass buttons will appear here.</td></tr>`;
+    const emptyMessage =
+      currentTable.key === 'laptops'
+        ? 'No records yet. Add a Laptop record above, then Edit Row, Delete Row, and Gate Pass buttons will appear here.'
+        : `No records yet. Add a ${escapeHtml(currentTable.label)} record above, then Edit Row and Delete Row buttons will appear here.`;
+    body.innerHTML = `<tr><td colspan="${currentTable.fields.length + 1}" class="empty-state">${emptyMessage}</td></tr>`;
     return;
   }
   body.innerHTML = rows
