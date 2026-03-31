@@ -168,6 +168,47 @@ function nextLaptopGatepassNo() {
   return `GP-LAP-${datePart}-${String(seq).padStart(4, '0')}`;
 }
 
+function escapePdfText(value) {
+  return String(value || '')
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)');
+}
+
+function buildSimplePdf(lines) {
+  const contentLines = ['BT', '/F1 11 Tf', '50 780 Td'];
+  lines.forEach((line, index) => {
+    if (index > 0) contentLines.push('0 -18 Td');
+    contentLines.push(`(${escapePdfText(line)}) Tj`);
+  });
+  contentLines.push('ET');
+  const stream = contentLines.join('\n');
+
+  const objects = [];
+  objects.push('1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj');
+  objects.push('2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj');
+  objects.push(
+    '3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj'
+  );
+  objects.push('4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj');
+  objects.push(`5 0 obj << /Length ${Buffer.byteLength(stream, 'utf8')} >> stream\n${stream}\nendstream endobj`);
+
+  let pdf = '%PDF-1.4\n';
+  const offsets = [0];
+  objects.forEach((object) => {
+    offsets.push(Buffer.byteLength(pdf, 'utf8'));
+    pdf += `${object}\n`;
+  });
+  const xrefOffset = Buffer.byteLength(pdf, 'utf8');
+  pdf += `xref\n0 ${objects.length + 1}\n`;
+  pdf += '0000000000 65535 f \n';
+  offsets.slice(1).forEach((offset) => {
+    pdf += `${String(offset).padStart(10, '0')} 00000 n \n`;
+  });
+  pdf += `trailer << /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return Buffer.from(pdf, 'utf8');
+}
+
 function buildGatepassFilters(query) {
   const status = String(query.status || '').trim().toLowerCase();
   const laptopId = query.laptop_id ? parseInt(String(query.laptop_id), 10) : null;
@@ -798,6 +839,47 @@ td,th{border:1px solid #222;padding:8px;text-align:left} .muted{color:#555}
 </body></html>`;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(html);
+});
+
+app.get('/api/laptop-gatepasses/:id/pdf', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).send('invalid id');
+  const row = db
+    .prepare(
+      `SELECT g.*, l.service_tag, l.model, l.asset_owner, l.dept, l.location
+       FROM laptop_gatepasses g
+       LEFT JOIN laptops l ON l.id = g.laptop_id
+       WHERE g.id = ?`
+    )
+    .get(id);
+  if (!row) return res.status(404).send('gatepass not found');
+
+  const pdf = buildSimplePdf([
+    `Laptop Gate Pass - ${row.gatepass_no}`,
+    `Status: ${row.status || ''}`,
+    `Service Tag: ${row.service_tag || ''}`,
+    `Model: ${row.model || ''}`,
+    `Asset Owner: ${row.asset_owner || ''}`,
+    `Dept: ${row.dept || ''}`,
+    `Location: ${row.location || ''}`,
+    `Issued To: ${row.issued_to || ''}`,
+    `Purpose: ${row.purpose || ''}`,
+    `Out Date: ${row.out_date || ''}`,
+    `Expected Return: ${row.expected_return_date || ''}`,
+    `Approved By: ${row.approved_by || ''}`,
+    `Keyboard: ${row.keyboard || ''}`,
+    `Mouse: ${row.mouse || ''}`,
+    `HeadPhone: ${row.headphone || ''}`,
+    `USB Extender: ${row.usb_extender || ''}`,
+    `Authority Signatory: ${row.authority_signatory || ''}`,
+    `Security Signatory: ${row.security_signatory || ''}`,
+    `User Signatory: ${row.user_signatory || ''}`,
+    `Remarks: ${row.remarks || ''}`,
+  ]);
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${row.gatepass_no}.pdf"`);
+  res.send(pdf);
 });
 
 app.get('/api/register/:table', (req, res) => {

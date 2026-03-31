@@ -313,6 +313,7 @@ async function loadGatePasses() {
         <td>${escapeHtml(g.status || '—')}</td>
         <td>
           <button class="btn secondary gp-print" data-id="${g.id}">Print</button>
+          <a class="btn secondary" href="/api/laptop-gatepasses/${g.id}/pdf">Download PDF</a>
           ${returnBtn}
         </td>
       </tr>`;
