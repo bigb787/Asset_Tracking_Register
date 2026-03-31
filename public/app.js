@@ -147,6 +147,7 @@ async function fetchJSON(url, opts) {
 let activeUser = null;
 let currentTable = TABLES[0];
 let gatepassLaptopFilter = '';
+let editingRowId = null;
 
 function showLogin() {
   $('#login-view').classList.remove('hidden');
@@ -169,6 +170,16 @@ function escapeHtml(s) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function normalizeDisplayValue(value) {
+  return value == null || value === '' ? '—' : String(value);
+}
+
+function renderCellInput(key, value) {
+  return `<input class="row-edit-input" data-key="${escapeHtml(key)}" value="${escapeHtml(
+    value ?? ''
+  )}" />`;
 }
 
 function renderTableSelector() {
@@ -237,24 +248,39 @@ async function loadCurrentTable() {
   body.innerHTML = rows
     .map((r) => {
       const cols = currentTable.fields
-        .map(([k]) => `<td>${escapeHtml(r[k] ?? '—')}</td>`)
+        .map(([k]) =>
+          editingRowId === r.id
+            ? `<td>${renderCellInput(k, r[k])}</td>`
+            : `<td>${escapeHtml(normalizeDisplayValue(r[k]))}</td>`
+        )
         .join('');
       const laptopGateBtn =
         currentTable.key === 'laptops'
           ? `<button class="btn secondary row-gatepass" data-id="${r.id}">Gate Pass</button>
              <button class="btn secondary row-gatepass-history" data-id="${r.id}">Gate Passes</button>`
           : '';
+      const actionButtons =
+        editingRowId === r.id
+          ? `<button class="btn row-save" data-id="${r.id}">Save Changes</button>
+             <button class="btn secondary row-cancel" data-id="${r.id}">Cancel</button>`
+          : `${laptopGateBtn}
+             <button class="btn secondary row-edit" data-id="${r.id}">Edit Row</button>
+             <button class="btn danger row-delete" data-id="${r.id}">Delete Row</button>`;
       return `<tr><td>
         <div class="row-actions">
-          ${laptopGateBtn}
-          <button class="btn secondary row-edit" data-id="${r.id}">Edit Row</button>
-          <button class="btn danger row-delete" data-id="${r.id}">Delete Row</button>
+          ${actionButtons}
         </div>
       </td>${cols}</tr>`;
     })
     .join('');
   body.querySelectorAll('.row-edit').forEach((btn) => {
     btn.addEventListener('click', onEditRow);
+  });
+  body.querySelectorAll('.row-save').forEach((btn) => {
+    btn.addEventListener('click', onSaveRow);
+  });
+  body.querySelectorAll('.row-cancel').forEach((btn) => {
+    btn.addEventListener('click', onCancelEdit);
   });
   body.querySelectorAll('.row-delete').forEach((btn) => {
     btn.addEventListener('click', onDeleteRow);
@@ -418,30 +444,34 @@ async function onDeleteRow(ev) {
 }
 
 async function onEditRow(ev) {
+  editingRowId = Number(ev.target.getAttribute('data-id'));
+  await loadCurrentTable();
+}
+
+async function onSaveRow(ev) {
   const id = ev.target.getAttribute('data-id');
   const rowEl = ev.target.closest('tr');
   if (!id || !rowEl) return;
-  const cells = Array.from(rowEl.querySelectorAll('td')).slice(0, currentTable.fields.length);
   const patch = {};
-  for (let i = 0; i < currentTable.fields.length; i += 1) {
-    const [key, label] = currentTable.fields[i];
-    const currentValue = (cells[i]?.textContent || '').trim();
-    const normalizedCurrent = currentValue === '—' ? '' : currentValue;
-    const nextValue = prompt(`Edit ${label}:`, normalizedCurrent);
-    if (nextValue === null) return;
-    if (nextValue !== normalizedCurrent) patch[key] = nextValue.trim();
-  }
-  if (Object.keys(patch).length === 0) return;
+  rowEl.querySelectorAll('.row-edit-input').forEach((input) => {
+    patch[input.getAttribute('data-key')] = input.value.trim();
+  });
   try {
     await fetchJSON(`/api/register/${currentTable.key}/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
     });
+    editingRowId = null;
     await refresh();
   } catch (err) {
     alert(err.message);
   }
+}
+
+async function onCancelEdit() {
+  editingRowId = null;
+  await loadCurrentTable();
 }
 
 async function onCreateLaptopGatepass(ev) {
