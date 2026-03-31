@@ -148,6 +148,7 @@ let activeUser = null;
 let currentTable = TABLES[0];
 let editingRowId = null;
 let currentRows = [];
+let editingGatepassId = null;
 
 function showLogin() {
   $('#login-view').classList.remove('hidden');
@@ -180,6 +181,19 @@ function renderCellInput(key, value) {
   return `<input class="row-edit-input" data-key="${escapeHtml(key)}" value="${escapeHtml(
     value ?? ''
   )}" />`;
+}
+
+function renderGatepassInput(key, value) {
+  if (key === 'status') {
+    const statuses = ['draft', 'approved', 'returned', 'cancelled'];
+    return `<select class="row-edit-input" data-key="status">${statuses
+      .map(
+        (status) =>
+          `<option value="${status}"${String(value || '').toLowerCase() === status ? ' selected' : ''}>${status}</option>`
+      )
+      .join('')}</select>`;
+  }
+  return `<input class="row-edit-input" data-key="${escapeHtml(key)}" value="${escapeHtml(value ?? '')}" />`;
 }
 
 function renderTableSelector() {
@@ -300,22 +314,39 @@ async function loadGatePasses() {
   const tbody = $('#gp-rows');
   tbody.innerHTML = rows
     .map((g) => {
-      const returnBtn =
-        g.status !== 'returned'
-          ? `<button class="btn secondary gp-return" data-id="${g.id}">Mark Returned</button>`
-          : '';
-      return `<tr>
+      const isEditing = editingGatepassId === g.id;
+      const cells = isEditing
+        ? `
+        <td>${escapeHtml(g.gatepass_no)}</td>
+        <td>${escapeHtml(g.laptop_id)}</td>
+        <td>${escapeHtml(g.service_tag || '—')}</td>
+        <td>${renderGatepassInput('issued_to', g.issued_to)}</td>
+        <td>${renderGatepassInput('out_date', g.out_date)}</td>
+        <td>${renderGatepassInput('status', g.status)}</td>
+      `
+        : `
         <td>${escapeHtml(g.gatepass_no)}</td>
         <td>${escapeHtml(g.laptop_id)}</td>
         <td>${escapeHtml(g.service_tag || '—')}</td>
         <td>${escapeHtml(g.issued_to || '—')}</td>
         <td>${escapeHtml(g.out_date || '—')}</td>
         <td>${escapeHtml(g.status || '—')}</td>
-        <td>
+      `;
+      const actions = isEditing
+        ? `
+          <button class="btn gp-save" data-id="${g.id}">Save</button>
+          <button class="btn secondary gp-cancel" data-id="${g.id}">Cancel</button>
+          <button class="btn danger gp-delete" data-id="${g.id}">Delete</button>
+        `
+        : `
           <button class="btn secondary gp-print" data-id="${g.id}">Print</button>
           <a class="btn secondary" href="/api/laptop-gatepasses/${g.id}/pdf">Download Gate Pass PDF</a>
-          ${returnBtn}
-        </td>
+          <button class="btn secondary gp-edit" data-id="${g.id}">Edit</button>
+          <button class="btn danger gp-delete" data-id="${g.id}">Delete</button>
+        `;
+      return `<tr>
+        ${cells}
+        <td>${actions}</td>
       </tr>`;
     })
     .join('');
@@ -325,8 +356,17 @@ async function loadGatePasses() {
       window.open(`/api/laptop-gatepasses/${id}/print`, '_blank');
     });
   });
-  tbody.querySelectorAll('.gp-return').forEach((btn) => {
-    btn.addEventListener('click', onMarkReturned);
+  tbody.querySelectorAll('.gp-edit').forEach((btn) => {
+    btn.addEventListener('click', onEditGatepass);
+  });
+  tbody.querySelectorAll('.gp-save').forEach((btn) => {
+    btn.addEventListener('click', onSaveGatepass);
+  });
+  tbody.querySelectorAll('.gp-cancel').forEach((btn) => {
+    btn.addEventListener('click', onCancelGatepassEdit);
+  });
+  tbody.querySelectorAll('.gp-delete').forEach((btn) => {
+    btn.addEventListener('click', onDeleteGatepass);
   });
 }
 
@@ -495,15 +535,54 @@ async function onCreateLaptopGatepass(ev) {
   }
 }
 
-async function onMarkReturned(ev) {
+async function onEditGatepass(ev) {
+  editingGatepassId = Number(ev.target.getAttribute('data-id'));
+  await loadGatePasses();
+}
+
+async function onSaveGatepass(ev) {
   const id = ev.target.getAttribute('data-id');
-  if (!confirm('Mark this gate pass as returned?')) return;
+  const rowEl = ev.target.closest('tr');
+  if (!id || !rowEl) return;
+  const patch = {};
+  rowEl.querySelectorAll('.row-edit-input').forEach((input) => {
+    patch[input.getAttribute('data-key')] = input.value.trim();
+  });
   try {
-    await fetchJSON(`/api/laptop-gatepasses/${id}/status`, {
+    await fetchJSON(`/api/laptop-gatepasses/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'returned' }),
+      body: JSON.stringify(patch),
     });
+    editingGatepassId = null;
+    await loadGatePasses();
+    await loadAudit();
+  } catch (err) {
+    alert(err.message);
+  }
+}
+
+async function onCancelGatepassEdit() {
+  editingGatepassId = null;
+  await loadGatePasses();
+}
+
+async function onDeleteGatepass(ev) {
+  const id = ev.target.getAttribute('data-id');
+  if (!confirm('Delete this gatepass?')) return;
+  try {
+    const res = await fetch(`/api/laptop-gatepasses/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const text = await res.text();
+      let msg = res.statusText;
+      try {
+        msg = JSON.parse(text).error || msg;
+      } catch {
+        /* ignore */
+      }
+      throw new Error(msg);
+    }
+    editingGatepassId = null;
     await loadGatePasses();
     await loadAudit();
   } catch (err) {

@@ -796,6 +796,80 @@ app.patch('/api/laptop-gatepasses/:id/status', (req, res) => {
   res.json(next);
 });
 
+app.patch('/api/laptop-gatepasses/:id', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'invalid id' });
+  const prev = db.prepare('SELECT * FROM laptop_gatepasses WHERE id = ?').get(id);
+  if (!prev) return res.status(404).json({ error: 'gatepass not found' });
+
+  const allowed = [
+    'issued_to',
+    'purpose',
+    'out_date',
+    'expected_return_date',
+    'approved_by',
+    'status',
+    'remarks',
+    'keyboard',
+    'mouse',
+    'headphone',
+    'usb_extender',
+    'authority_signatory',
+    'security_signatory',
+    'user_signatory',
+  ];
+  const patch = {};
+  allowed.forEach((key) => {
+    if (Object.prototype.hasOwnProperty.call(req.body, key)) {
+      const value = req.body[key];
+      patch[key] = value === '' ? null : value;
+    }
+  });
+  if (Object.keys(patch).length === 0) {
+    return res.status(400).json({ error: 'no fields provided' });
+  }
+  if (patch.status != null) {
+    const nextStatus = String(patch.status).trim().toLowerCase();
+    const allowedStatuses = ['draft', 'approved', 'returned', 'cancelled'];
+    if (!allowedStatuses.includes(nextStatus)) {
+      return res.status(400).json({ error: `status must be one of: ${allowedStatuses.join(', ')}` });
+    }
+    patch.status = nextStatus;
+  }
+  const sets = Object.keys(patch)
+    .map((key) => `${key} = @${key}`)
+    .concat(["updated_at = datetime('now')"])
+    .join(', ');
+  db.prepare(`UPDATE laptop_gatepasses SET ${sets} WHERE id = @id`).run({ ...patch, id });
+  const next = db.prepare('SELECT * FROM laptop_gatepasses WHERE id = ?').get(id);
+  insertAuditTrail({
+    entity_table: 'laptop_gatepasses',
+    entity_id: id,
+    action_type: 'UPDATE',
+    previous_value: JSON.stringify(prev),
+    new_value: JSON.stringify(next),
+    changed_by: req.authUser?.username || 'system',
+  });
+  res.json(next);
+});
+
+app.delete('/api/laptop-gatepasses/:id', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'invalid id' });
+  const prev = db.prepare('SELECT * FROM laptop_gatepasses WHERE id = ?').get(id);
+  if (!prev) return res.status(404).json({ error: 'gatepass not found' });
+  insertAuditTrail({
+    entity_table: 'laptop_gatepasses',
+    entity_id: id,
+    action_type: 'DELETE',
+    previous_value: JSON.stringify(prev),
+    new_value: null,
+    changed_by: req.authUser?.username || 'system',
+  });
+  db.prepare('DELETE FROM laptop_gatepasses WHERE id = ?').run(id);
+  res.status(204).send();
+});
+
 app.get('/api/laptop-gatepasses/:id/print', (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!Number.isInteger(id)) return res.status(400).send('invalid id');
