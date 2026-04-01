@@ -252,6 +252,218 @@ const TABLE_CONFIG = {
   admin_assets: { uniqueField: 'invoice_no' },
 };
 
+const REGISTER_EXPORTS = [
+  {
+    key: 'laptops',
+    sheetName: 'Laptops',
+    columns: [
+      { header: 'Asset type', key: 'asset_type', width: 14 },
+      { header: 'Asset Manufacturer', key: 'asset_manufacturer', width: 20 },
+      { header: 'Service Tag', key: 'service_tag', width: 18 },
+      { header: 'Model', key: 'model', width: 14 },
+      { header: 'P/N', key: 'p_n', width: 14 },
+      { header: 'Asset Owner', key: 'asset_owner', width: 18 },
+      { header: 'Assigned To', key: 'assigned_to', width: 18 },
+      { header: 'Asset Status', key: 'asset_status', width: 14 },
+      { header: 'Last Owner', key: 'last_owner', width: 16 },
+      { header: 'Dept', key: 'dept', width: 12 },
+      { header: 'Location', key: 'location', width: 16 },
+      { header: 'Asset Health', key: 'asset_health', width: 14 },
+      { header: 'Warranty', key: 'warranty', width: 12 },
+      { header: 'Install date', key: 'install_date', width: 14 },
+      { header: 'Date Added/Updated', key: 'date_added_updated', width: 18 },
+      { header: 'Processor', key: 'processor', width: 16 },
+      { header: 'RAM', key: 'ram', width: 10 },
+      { header: 'HardDisk', key: 'harddisk', width: 14 },
+      { header: 'O/S', key: 'o_s', width: 16 },
+      { header: 'Supt Vendor', key: 'supt_vendor', width: 14 },
+      { header: 'Keyboard', key: 'keyboard', width: 10 },
+      { header: 'Mouse', key: 'mouse', width: 10 },
+      { header: 'HeadPhone', key: 'headphone', width: 12 },
+      { header: 'USB Extender', key: 'usb_extender', width: 12 },
+      { header: 'Contains PII (Yes/No)', key: 'contains_pii', width: 18 },
+      { header: 'Free (?)', key: 'free_note', width: 20 },
+    ],
+  },
+  {
+    key: 'desktops',
+    sheetName: 'Desktops',
+    columns: [
+      { header: 'Asset type', key: 'asset_type', width: 14 },
+      { header: 'Asset Manufacturer', key: 'asset_manufacturer', width: 20 },
+      { header: 'Processor', key: 'processor', width: 16 },
+      { header: 'Asset Owner', key: 'asset_owner', width: 18 },
+      { header: 'Dept', key: 'dept', width: 12 },
+      { header: 'Location', key: 'location', width: 16 },
+      { header: 'Model', key: 'model', width: 14 },
+      { header: 'Service Tag', key: 'service_tag', width: 18 },
+      { header: 'Warranty', key: 'warranty', width: 12 },
+      { header: 'Install date', key: 'install_date', width: 14 },
+      { header: 'O/S', key: 'o_s', width: 16 },
+      { header: 'Supt Vendor', key: 'supt_vendor', width: 14 },
+      { header: 'Configuration', key: 'configuration', width: 18 },
+      { header: 'Contains PII (Yes/No)', key: 'contains_pii', width: 18 },
+      { header: 'Date Added/Updated', key: 'date_added_updated', width: 18 },
+      { header: 'Free (?)', key: 'free_note', width: 20 },
+    ],
+  },
+  {
+    key: 'monitors',
+    sheetName: 'Monitors',
+    columns: [
+      { header: 'Asset type', key: 'asset_type', width: 14 },
+      { header: 'User', key: 'user_name', width: 18 },
+      { header: 'Model', key: 'model', width: 14 },
+      { header: 'Warranty', key: 'warranty', width: 12 },
+      { header: 'INSTALL DATE', key: 'install_date', width: 14 },
+      { header: 'Supt Vendor', key: 'supt_vendor', width: 14 },
+      { header: 'Location', key: 'location', width: 16 },
+      { header: 'Dept', key: 'dept', width: 12 },
+      { header: 'Asset Owner', key: 'asset_owner', width: 18 },
+      { header: 'Contains PII (Yes/No)', key: 'contains_pii', width: 18 },
+      { header: 'Date Added/Updated', key: 'date_added_updated', width: 18 },
+      { header: 'Free (?)', key: 'free_note', width: 20 },
+    ],
+  },
+  {
+    key: 'networking',
+    sheetName: 'Networking',
+    columns: [
+      { header: 'Asset type', key: 'asset_type', width: 14 },
+      { header: 'User', key: 'user_name', width: 18 },
+      { header: 'Model', key: 'model', width: 14 },
+      { header: 'S/N', key: 's_n', width: 18 },
+      { header: 'Warranty', key: 'warranty', width: 12 },
+      { header: 'Supt Vendor', key: 'supt_vendor', width: 14 },
+      { header: 'Location', key: 'location', width: 16 },
+      { header: 'Dept', key: 'dept', width: 12 },
+      { header: 'Asset Owner', key: 'asset_owner', width: 18 },
+      { header: 'Contains PII (Yes/No)', key: 'contains_pii', width: 18 },
+      { header: 'Date Added/Updated', key: 'date_added_updated', width: 18 },
+      { header: 'Free (?)', key: 'free_note', width: 20 },
+    ],
+  },
+  {
+    key: 'cloud_asset_register',
+    sheetName: 'Cloud Assets',
+    columns: [
+      { header: 'Asset', key: 'asset', width: 18 },
+      { header: 'Asset Type', key: 'asset_type', width: 16 },
+      { header: 'Asset Value', key: 'asset_value', width: 16 },
+      { header: 'Asset Owner', key: 'asset_owner', width: 18 },
+      { header: 'Asset Location', key: 'asset_location', width: 18 },
+      { header: 'Contains PII data?', key: 'contains_pii_data', width: 18 },
+      { header: 'Asset Region', key: 'asset_region', width: 16 },
+      { header: 'Date Added/Updated', key: 'date_added_updated', width: 18 },
+      { header: 'Free (?)', key: 'free_note', width: 20 },
+    ],
+  },
+  {
+    key: 'infodesk_applications',
+    sheetName: 'Infodesk Apps',
+    columns: [
+      { header: 'Asset', key: 'asset', width: 18 },
+      { header: 'Asset Type', key: 'asset_type', width: 16 },
+      { header: 'Asset Owner', key: 'asset_owner', width: 18 },
+      { header: 'Asset Location', key: 'asset_location', width: 18 },
+      { header: 'Contains PII data?', key: 'contains_pii_data', width: 18 },
+      { header: 'Date Added/Updated', key: 'date_added_updated', width: 18 },
+      { header: 'Free (?)', key: 'free_note', width: 20 },
+    ],
+  },
+  {
+    key: 'third_party_softwares',
+    sheetName: 'Third Party SW',
+    columns: [
+      { header: 'Asset', key: 'asset', width: 18 },
+      { header: 'Asset Type', key: 'asset_type', width: 16 },
+      { header: 'Asset Value', key: 'asset_value', width: 16 },
+      { header: 'Asset Owner', key: 'asset_owner', width: 18 },
+      { header: 'Asset Location', key: 'asset_location', width: 18 },
+      { header: 'Contains PII data?', key: 'contains_pii_data', width: 18 },
+      { header: 'Date Added/Updated', key: 'date_added_updated', width: 18 },
+      { header: 'Free (?)', key: 'free_note', width: 20 },
+    ],
+  },
+  {
+    key: 'ups',
+    sheetName: 'UPS',
+    columns: [
+      { header: 'Asset type', key: 'asset_type', width: 14 },
+      { header: 'Device Id', key: 'device_id', width: 18 },
+      { header: 'Model', key: 'model', width: 14 },
+      { header: 'Warranty', key: 'warranty', width: 12 },
+      { header: 'INSTALL DATE', key: 'install_date', width: 14 },
+      { header: 'Supt Vendor', key: 'supt_vendor', width: 14 },
+      { header: 'Location', key: 'location', width: 16 },
+      { header: 'Dept', key: 'dept', width: 12 },
+      { header: 'Asset Owner', key: 'asset_owner', width: 18 },
+      { header: 'Date Added/Updated', key: 'date_added_updated', width: 18 },
+      { header: 'Free (?)', key: 'free_note', width: 20 },
+    ],
+  },
+  {
+    key: 'mobile_phones',
+    sheetName: 'Mobile Phones',
+    columns: [
+      { header: 'Asset type', key: 'asset_type', width: 14 },
+      { header: 'Model', key: 'model', width: 14 },
+      { header: 'Warranty', key: 'warranty', width: 12 },
+      { header: 'Supt Vendor', key: 'supt_vendor', width: 14 },
+      { header: 'Location', key: 'location', width: 16 },
+      { header: 'Dept', key: 'dept', width: 12 },
+      { header: 'Asset Owner', key: 'asset_owner', width: 18 },
+      { header: 'Contains PII (Yes/No)', key: 'contains_pii', width: 18 },
+      { header: 'Date Added/Updated', key: 'date_added_updated', width: 18 },
+      { header: 'Free (?)', key: 'free_note', width: 20 },
+    ],
+  },
+  {
+    key: 'scanners_and_others',
+    sheetName: 'Scanners Others',
+    columns: [
+      { header: 'Asset type', key: 'asset_type', width: 14 },
+      { header: 'Model', key: 'model', width: 14 },
+      { header: 'S/N', key: 's_n', width: 18 },
+      { header: 'Warranty', key: 'warranty', width: 12 },
+      { header: 'Supt Vendor', key: 'supt_vendor', width: 14 },
+      { header: 'Location', key: 'location', width: 16 },
+      { header: 'Dept', key: 'dept', width: 12 },
+      { header: 'Asset Owner', key: 'asset_owner', width: 18 },
+      { header: 'Contains PII (Yes/No)', key: 'contains_pii', width: 18 },
+      { header: 'Date Added/Updated', key: 'date_added_updated', width: 18 },
+      { header: 'Free (?)', key: 'free_note', width: 20 },
+    ],
+  },
+  {
+    key: 'admin_assets',
+    sheetName: 'Admin Assets',
+    columns: [
+      { header: 'Asset type', key: 'asset_type', width: 14 },
+      { header: 'Invoice No', key: 'invoice_no', width: 18 },
+      { header: 'Warranty', key: 'warranty', width: 12 },
+      { header: 'INSTALL DATE', key: 'install_date', width: 14 },
+      { header: 'Supt Vendor', key: 'supt_vendor', width: 14 },
+      { header: 'Location', key: 'location', width: 16 },
+      { header: 'Dept', key: 'dept', width: 12 },
+      { header: 'Asset Owner', key: 'asset_owner', width: 18 },
+      { header: 'Contains PII (Yes/No)', key: 'contains_pii', width: 18 },
+      { header: 'Date Added/Updated', key: 'date_added_updated', width: 18 },
+      { header: 'Free (?)', key: 'free_note', width: 20 },
+    ],
+  },
+];
+
+function addWorksheetFromQuery(workbook, { sheetName, columns, query }) {
+  const sheet = workbook.addWorksheet(sheetName, {
+    properties: { defaultColWidth: 18 },
+  });
+  sheet.columns = columns;
+  const rows = db.prepare(query).all();
+  rows.forEach((row) => sheet.addRow(row));
+  sheet.getRow(1).font = { bold: true };
+}
+
 function normalizeInputRow(body) {
   const out = {};
   Object.keys(body || {}).forEach((k) => {
@@ -1097,57 +1309,22 @@ app.delete('/api/register/:table/:id', (req, res) => {
 
 // --- Excel export (ISO-oriented columns) ---
 app.get('/api/export/assets.xlsx', async (_req, res) => {
-  const rows = db
-    .prepare(`
-      SELECT *
-      FROM laptops
-      ORDER BY service_tag
-    `)
-    .all();
-
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Asset Register';
-  const sheet = workbook.addWorksheet('Asset Inventory', {
-    properties: { defaultColWidth: 18 },
+  REGISTER_EXPORTS.forEach((tableExport) => {
+    const query = `SELECT * FROM ${tableExport.key} ORDER BY id DESC`;
+    addWorksheetFromQuery(workbook, {
+      sheetName: tableExport.sheetName,
+      columns: tableExport.columns,
+      query,
+    });
   });
-
-  sheet.columns = [
-    { header: 'Asset type', key: 'asset_type', width: 14 },
-    { header: 'Asset Manufacturer', key: 'asset_manufacturer', width: 20 },
-    { header: 'Service Tag', key: 'service_tag', width: 18 },
-    { header: 'Model', key: 'model', width: 14 },
-    { header: 'P/N', key: 'p_n', width: 14 },
-    { header: 'Asset Owner', key: 'asset_owner', width: 18 },
-    { header: 'Assigned To', key: 'assigned_to', width: 18 },
-    { header: 'Asset Status', key: 'asset_status', width: 14 },
-    { header: 'Last Owner', key: 'last_owner', width: 16 },
-    { header: 'Dept', key: 'dept', width: 12 },
-    { header: 'Location', key: 'location', width: 16 },
-    { header: 'Asset Health', key: 'asset_health', width: 14 },
-    { header: 'Warranty', key: 'warranty', width: 12 },
-    { header: 'Install date', key: 'install_date', width: 14 },
-    { header: 'Date Added/Updated', key: 'date_added_updated', width: 18 },
-    { header: 'Processor', key: 'processor', width: 16 },
-    { header: 'RAM', key: 'ram', width: 10 },
-    { header: 'HardDisk', key: 'harddisk', width: 14 },
-    { header: 'O/S', key: 'o_s', width: 16 },
-    { header: 'Supt Vendor', key: 'supt_vendor', width: 14 },
-    { header: 'Keyboard', key: 'keyboard', width: 10 },
-    { header: 'Mouse', key: 'mouse', width: 10 },
-    { header: 'HeadPhone', key: 'headphone', width: 12 },
-    { header: 'USB Extender', key: 'usb_extender', width: 12 },
-    { header: 'Contains PII (Yes/No)', key: 'contains_pii', width: 18 },
-  ];
-
-  rows.forEach((r) => sheet.addRow(r));
-
-  sheet.getRow(1).font = { bold: true };
 
   res.setHeader(
     'Content-Type',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
   );
-  res.setHeader('Content-Disposition', 'attachment; filename="asset-inventory-report.xlsx"');
+  res.setHeader('Content-Disposition', 'attachment; filename="asset-register-all-tables.xlsx"');
   await workbook.xlsx.write(res);
   res.end();
 });

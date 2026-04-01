@@ -122,6 +122,11 @@ const TABLES = [
       ['contains_pii', 'Contains PII (Yes/No)'], ['date_added_updated', 'Date Added/Updated'], ['free_note', 'Free (?)'],
     ],
   },
+  {
+    key: 'gatepasses',
+    label: 'Gate Passes',
+    fields: [],
+  },
 ];
 
 async function fetchJSON(url, opts) {
@@ -149,6 +154,14 @@ let currentTable = TABLES[0];
 let editingRowId = null;
 let currentRows = [];
 let editingGatepassId = null;
+
+function getRegisterFormSection() {
+  return $('#dynamic-form').closest('section');
+}
+
+function getRegisterTableSection() {
+  return $('#table-title').closest('section');
+}
 
 function showLogin() {
   $('#login-view').classList.remove('hidden');
@@ -220,14 +233,24 @@ function renderTableSelector() {
 
 function renderDynamicForm() {
   $('#table-title').textContent = currentTable.label;
-  $('#history-title').textContent = `${currentTable.label} History`;
+  $('#history-title').textContent =
+    currentTable.key === 'gatepasses' ? 'Gate Passes History' : `${currentTable.label} History`;
   $('#history-panel').open = false;
-  if (currentTable.key === 'laptops') {
+  if (currentTable.key === 'laptops' || currentTable.key === 'gatepasses') {
     $('#gatepass-panel').classList.remove('hidden');
   } else {
     $('#gatepass-panel').classList.add('hidden');
   }
   const form = $('#dynamic-form');
+  const registerFormSection = getRegisterFormSection();
+  const registerTableSection = getRegisterTableSection();
+  if (currentTable.key === 'gatepasses') {
+    registerFormSection.classList.add('hidden');
+    registerTableSection.classList.add('hidden');
+    return;
+  }
+  registerFormSection.classList.remove('hidden');
+  registerTableSection.classList.remove('hidden');
   const rowActionHelp =
     currentTable.key === 'laptops'
       ? 'After saving, each row will show Edit Row and Delete Row in the first column.'
@@ -256,6 +279,10 @@ function renderDynamicForm() {
 }
 
 async function loadCurrentTable() {
+  if (currentTable.key === 'gatepasses') {
+    currentRows = [];
+    return;
+  }
   const rows = await fetchJSON(`/api/register/${currentTable.key}`);
   currentRows = rows;
   const head = $('#data-head');
@@ -308,7 +335,7 @@ async function loadCurrentTable() {
 }
 
 async function loadGatePasses() {
-  if (currentTable.key !== 'laptops') return;
+  if (currentTable.key !== 'laptops' && currentTable.key !== 'gatepasses') return;
   const status = $('#gp-status-filter').value || 'all';
   const laptopId = ($('#gp-laptop-filter').value || '').trim();
   const outDateFrom = ($('#gp-out-date-from').value || '').trim();
@@ -400,7 +427,8 @@ function renderGatepassBadges(rows) {
 }
 
 async function loadAudit() {
-  const entries = await fetchJSON(`/api/audit?limit=20&table=${encodeURIComponent(currentTable.key)}`);
+  const auditTable = currentTable.key === 'gatepasses' ? 'laptop_gatepasses' : currentTable.key;
+  const entries = await fetchJSON(`/api/audit?limit=20&table=${encodeURIComponent(auditTable)}`);
   $('#audit-list').innerHTML = entries.length
     ? entries
         .map(
@@ -451,6 +479,7 @@ $('#logout-btn').addEventListener('click', async () => {
 
 $('#dynamic-form').addEventListener('submit', async (ev) => {
   ev.preventDefault();
+  if (currentTable.key === 'gatepasses') return;
   const fd = new FormData(ev.target);
   const body = Object.fromEntries(fd.entries());
   try {
@@ -467,6 +496,7 @@ $('#dynamic-form').addEventListener('submit', async (ev) => {
 });
 
 async function onDeleteRow(ev) {
+  if (currentTable.key === 'gatepasses') return;
   const id = ev.target.getAttribute('data-id');
   if (!confirm(`Delete this ${currentTable.label} record?`)) return;
   try {
@@ -488,11 +518,13 @@ async function onDeleteRow(ev) {
 }
 
 async function onEditRow(ev) {
+  if (currentTable.key === 'gatepasses') return;
   editingRowId = Number(ev.target.getAttribute('data-id'));
   await loadCurrentTable();
 }
 
 async function onSaveRow(ev) {
+  if (currentTable.key === 'gatepasses') return;
   const id = ev.target.getAttribute('data-id');
   const rowEl = ev.target.closest('tr');
   if (!id || !rowEl) return;
@@ -514,6 +546,7 @@ async function onSaveRow(ev) {
 }
 
 async function onCancelEdit() {
+  if (currentTable.key === 'gatepasses') return;
   editingRowId = null;
   await loadCurrentTable();
 }
