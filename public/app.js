@@ -249,7 +249,7 @@ function renderDynamicForm() {
   $('#history-title').textContent =
     currentTable.key === 'gatepasses' ? 'Gate Passes History' : `${currentTable.label} History`;
   $('#history-panel').open = false;
-  if (currentTable.key === 'laptops' || currentTable.key === 'gatepasses') {
+  if (currentTable.key === 'gatepasses') {
     $('#gatepass-panel').classList.remove('hidden');
   } else {
     $('#gatepass-panel').classList.add('hidden');
@@ -659,6 +659,9 @@ async function bootstrap() {
     });
     $('#show-gatepasses-btn').addEventListener('click', () => {
       setCurrentTable('gatepasses').catch((e) => console.error(e));
+    });
+    $('#gp-back-btn').addEventListener('click', () => {
+      setCurrentTable('laptops').catch((e) => console.error(e));
     });
     updateSectionSwitcher();
     renderDynamicForm();
