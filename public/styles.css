@@ -110,6 +110,14 @@ body {
   flex-wrap: wrap;
 }
 
+.import-bar {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
 .form-help {
   color: var(--muted);
   font-size: 0.85rem;

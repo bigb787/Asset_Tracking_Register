@@ -190,6 +190,24 @@ function normalizeDisplayValue(value) {
   return value == null || value === '' ? '—' : String(value);
 }
 
+function summarizeImportResult(result) {
+  const parts = [`Imported: ${result.imported || 0}`, `Skipped: ${result.skipped || 0}`];
+  if (result.errors?.length) {
+    parts.push(`Errors: ${result.errors.length}`);
+    parts.push(result.errors.slice(0, 5).join('\n'));
+  }
+  return parts.join('\n');
+}
+
+async function uploadImport(tableKey, file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  return fetchJSON(`/api/import/${tableKey}`, {
+    method: 'POST',
+    body: formData,
+  });
+}
+
 function renderCellInput(key, value) {
   return `<input class="row-edit-input" data-key="${escapeHtml(key)}" value="${escapeHtml(
     value ?? ''
@@ -260,10 +278,12 @@ function renderDynamicForm() {
   if (currentTable.key === 'gatepasses') {
     registerFormSection.classList.add('hidden');
     registerTableSection.classList.add('hidden');
+    $('#table-import-btn').disabled = true;
     return;
   }
   registerFormSection.classList.remove('hidden');
   registerTableSection.classList.remove('hidden');
+  $('#table-import-btn').disabled = false;
   const rowActionHelp =
     currentTable.key === 'laptops'
       ? 'After saving, each row will show Edit Row and Delete Row in the first column.'
@@ -662,6 +682,37 @@ async function bootstrap() {
     });
     $('#gp-back-btn').addEventListener('click', () => {
       setCurrentTable('laptops').catch((e) => console.error(e));
+    });
+    $('#table-import-btn').addEventListener('click', async () => {
+      if (currentTable.key === 'gatepasses') return;
+      const file = $('#table-import-file').files?.[0];
+      if (!file) {
+        alert('Choose an Excel file first.');
+        return;
+      }
+      try {
+        const result = await uploadImport(currentTable.key, file);
+        $('#table-import-file').value = '';
+        await refresh();
+        alert(summarizeImportResult(result));
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+    $('#gp-import-btn').addEventListener('click', async () => {
+      const file = $('#gp-import-file').files?.[0];
+      if (!file) {
+        alert('Choose an Excel file first.');
+        return;
+      }
+      try {
+        const result = await uploadImport('gatepasses', file);
+        $('#gp-import-file').value = '';
+        await refresh();
+        alert(summarizeImportResult(result));
+      } catch (err) {
+        alert(err.message);
+      }
     });
     updateSectionSwitcher();
     renderDynamicForm();

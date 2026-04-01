@@ -4,6 +4,7 @@ const cookieParser = require('cookie-parser');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const ExcelJS = require('exceljs');
+const multer = require('multer');
 const { db, insertAuditTrail } = require('./database');
 
 const app = express();
@@ -12,6 +13,7 @@ const AUTH_COOKIE = 'asset_register_auth';
 const AUTH_SECRET = process.env.AUTH_SECRET || 'replace-this-in-production';
 const DEFAULT_ADMIN_USERNAME = process.env.DEFAULT_ADMIN_USERNAME || 'admin';
 const DEFAULT_ADMIN_PASSWORD = process.env.DEFAULT_ADMIN_PASSWORD || 'ChangeMe123!';
+const upload = multer({ storage: multer.memoryStorage() });
 
 app.use(express.json());
 app.use(cookieParser());
@@ -462,6 +464,138 @@ function addWorksheetFromQuery(workbook, { sheetName, columns, query }) {
   const rows = db.prepare(query).all();
   rows.forEach((row) => sheet.addRow(row));
   sheet.getRow(1).font = { bold: true };
+}
+
+const GATEPASS_IMPORT_COLUMNS = [
+  { header: 'Service Tag', key: 'service_tag' },
+  { header: 'Laptop ID', key: 'laptop_id' },
+  { header: 'Issued To', key: 'issued_to' },
+  { header: 'Purpose', key: 'purpose' },
+  { header: 'Out Date', key: 'out_date' },
+  { header: 'Expected Return Date', key: 'expected_return_date' },
+  { header: 'Approved By', key: 'approved_by' },
+  { header: 'Gate Pass Type', key: 'gatepass_type' },
+  { header: 'Status', key: 'status' },
+  { header: 'Keyboard', key: 'keyboard' },
+  { header: 'Mouse', key: 'mouse' },
+  { header: 'HeadPhone', key: 'headphone' },
+  { header: 'USB Extender', key: 'usb_extender' },
+  { header: 'Authority Signatory', key: 'authority_signatory' },
+  { header: 'Security Signatory', key: 'security_signatory' },
+  { header: 'User Signatory', key: 'user_signatory' },
+  { header: 'Remarks', key: 'remarks' },
+];
+
+function normalizeImportHeader(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^\w]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function buildImportColumnMap(columns) {
+  const map = new Map();
+  columns.forEach((column) => {
+    map.set(normalizeImportHeader(column.header), column.key);
+    map.set(normalizeImportHeader(column.key), column.key);
+  });
+  return map;
+}
+
+function getWorksheetValues(worksheet) {
+  const rows = [];
+  worksheet.eachRow((row, rowNumber) => {
+    rows.push({
+      rowNumber,
+      values: row.values.slice(1),
+    });
+  });
+  return rows;
+}
+
+function parseWorksheetRows(worksheet, columns) {
+  const worksheetRows = getWorksheetValues(worksheet).filter((row) =>
+    row.values.some((value) => String(value ?? '').trim() !== '')
+  );
+  if (!worksheetRows.length) {
+    return { headers: [], rows: [] };
+  }
+  const columnMap = buildImportColumnMap(columns);
+  const headers = worksheetRows[0].values.map((value) => columnMap.get(normalizeImportHeader(value)) || null);
+  const rows = worksheetRows.slice(1).map((row) => {
+    const entry = {};
+    headers.forEach((key, index) => {
+      if (!key) return;
+      const value = row.values[index];
+      entry[key] = value == null ? '' : String(value).trim();
+    });
+    return { rowNumber: row.rowNumber, values: entry };
+  });
+  return { headers, rows };
+}
+
+function importRegisterRow(table, cfg, rawRow, authUser) {
+  const row = normalizeInputRow(rawRow);
+  delete row.id;
+  delete row.created_at;
+  delete row.updated_at;
+  if (cfg.uniqueField) {
+    const uniqueValue = String(row[cfg.uniqueField] || '').trim();
+    if (!uniqueValue) {
+      return { error: `${cfg.uniqueField} is required` };
+    }
+    row[cfg.uniqueField] = uniqueValue;
+    if (existsByUniqueField(table, cfg.uniqueField, uniqueValue)) {
+      return { skipped: `${cfg.uniqueField} already exists` };
+    }
+  }
+  const keys = Object.keys(row).filter((key) => row[key] !== undefined);
+  if (!keys.length) {
+    return { skipped: 'empty row' };
+  }
+  const cols = keys.join(', ');
+  const placeholders = keys.map(() => '?').join(', ');
+  const values = keys.map((key) => row[key]);
+  const info = db.prepare(`INSERT INTO ${table} (${cols}) VALUES (${placeholders})`).run(...values);
+  const created = db.prepare(`SELECT * FROM ${table} WHERE id = ?`).get(info.lastInsertRowid);
+  insertAuditTrail({
+    entity_table: table,
+    entity_id: created.id,
+    action_type: 'CREATE',
+    previous_value: null,
+    new_value: JSON.stringify(created),
+    changed_by: authUser?.username || 'system',
+  });
+  return { created };
+}
+
+function resolveLaptopForImport(row) {
+  const serviceTag = String(row.service_tag || '').trim();
+  if (serviceTag) {
+    return getLaptopByServiceTag(serviceTag);
+  }
+  const laptopId = parseInt(String(row.laptop_id || '').trim(), 10);
+  if (Number.isInteger(laptopId)) {
+    return getLaptopById(laptopId);
+  }
+  return null;
+}
+
+function importGatepassRow(rawRow, authUser) {
+  const row = normalizeInputRow(rawRow);
+  delete row.id;
+  delete row.gatepass_no;
+  delete row.created_at;
+  delete row.updated_at;
+  delete row.created_by;
+  const laptop = resolveLaptopForImport(row);
+  if (!laptop) {
+    return { error: 'service_tag or laptop_id must match an existing laptop' };
+  }
+  const result = createLaptopGatepass(laptop, row, authUser);
+  if (result.error) return { error: result.error };
+  return result;
 }
 
 function normalizeInputRow(body) {
@@ -1190,6 +1324,74 @@ app.get('/api/register/:table', (req, res) => {
   if (!TABLE_CONFIG[table]) return res.status(404).json({ error: 'table not found' });
   const rows = db.prepare(`SELECT * FROM ${table} ORDER BY id DESC`).all();
   res.json(rows);
+});
+
+app.post('/api/import/:table', upload.single('file'), async (req, res) => {
+  const table = req.params.table;
+  const isGatepassImport = table === 'gatepasses';
+  const cfg = TABLE_CONFIG[table];
+  if (!isGatepassImport && !cfg) {
+    return res.status(404).json({ error: 'table not found' });
+  }
+  if (!req.file?.buffer) {
+    return res.status(400).json({ error: 'Excel file is required' });
+  }
+
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(req.file.buffer);
+  const worksheet = workbook.worksheets[0];
+  if (!worksheet) {
+    return res.status(400).json({ error: 'Excel worksheet not found' });
+  }
+
+  const importColumns = isGatepassImport
+    ? GATEPASS_IMPORT_COLUMNS
+    : REGISTER_EXPORTS.find((entry) => entry.key === table)?.columns || [];
+  if (!importColumns.length) {
+    return res.status(400).json({ error: 'import columns are not configured for this table' });
+  }
+
+  const parsed = parseWorksheetRows(worksheet, importColumns);
+  if (!parsed.rows.length) {
+    return res.status(400).json({ error: 'No import rows found in Excel file' });
+  }
+
+  const summary = {
+    imported: 0,
+    skipped: 0,
+    errors: [],
+  };
+
+  const tx = db.transaction(() => {
+    parsed.rows.forEach((row) => {
+      try {
+        const result = isGatepassImport
+          ? importGatepassRow(row.values, req.authUser)
+          : importRegisterRow(table, cfg, row.values, req.authUser);
+        if (result.created) {
+          summary.imported += 1;
+          return;
+        }
+        if (result.skipped) {
+          summary.skipped += 1;
+          return;
+        }
+        if (result.error) {
+          summary.errors.push(`Row ${row.rowNumber}: ${result.error}`);
+        }
+      } catch (error) {
+        summary.errors.push(`Row ${row.rowNumber}: ${error.message}`);
+      }
+    });
+  });
+
+  tx();
+  res.json({
+    ok: true,
+    imported: summary.imported,
+    skipped: summary.skipped,
+    errors: summary.errors,
+  });
 });
 
 app.post('/api/register/:table', (req, res) => {

@@ -36,6 +36,10 @@
         <button id="show-assets-btn" type="button" class="btn secondary">Asset Tables</button>
         <button id="show-gatepasses-btn" type="button" class="btn secondary">Gate Passes</button>
       </div>
+      <div class="import-bar">
+        <input id="table-import-file" type="file" accept=".xlsx" />
+        <button id="table-import-btn" type="button" class="btn secondary">Import Excel to Current Table</button>
+      </div>
       <label>Choose Table
         <select id="table-select"></select>
       </label>
@@ -57,6 +61,10 @@
       <h2>Laptop Gate Pass</h2>
       <div class="section-switcher">
         <button id="gp-back-btn" type="button" class="btn secondary">Back to Asset Tables</button>
+      </div>
+      <div class="import-bar">
+        <input id="gp-import-file" type="file" accept=".xlsx" />
+        <button id="gp-import-btn" type="button" class="btn secondary">Import Gate Pass Excel</button>
       </div>
       <form id="gatepass-form" class="form-grid">
         <label>Service Tag
