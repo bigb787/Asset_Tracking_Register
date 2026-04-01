@@ -225,10 +225,23 @@ function renderTableSelector() {
   select.addEventListener('change', async (ev) => {
     const selected = TABLES.find((t) => t.key === ev.target.value);
     if (!selected) return;
-    currentTable = selected;
-    renderDynamicForm();
-    await loadCurrentTable();
+    await setCurrentTable(selected.key);
   });
+}
+
+function updateSectionSwitcher() {
+  $('#show-assets-btn').classList.toggle('active', currentTable.key !== 'gatepasses');
+  $('#show-gatepasses-btn').classList.toggle('active', currentTable.key === 'gatepasses');
+}
+
+async function setCurrentTable(tableKey) {
+  const selected = TABLES.find((t) => t.key === tableKey);
+  if (!selected) return;
+  currentTable = selected;
+  $('#table-select').value = currentTable.key;
+  updateSectionSwitcher();
+  renderDynamicForm();
+  await refresh();
 }
 
 function renderDynamicForm() {
@@ -641,6 +654,13 @@ async function bootstrap() {
     const session = await fetchJSON('/api/auth/session');
     showApp(session.user);
     renderTableSelector();
+    $('#show-assets-btn').addEventListener('click', () => {
+      setCurrentTable('laptops').catch((e) => console.error(e));
+    });
+    $('#show-gatepasses-btn').addEventListener('click', () => {
+      setCurrentTable('gatepasses').catch((e) => console.error(e));
+    });
+    updateSectionSwitcher();
     renderDynamicForm();
     $('#gp-refresh-btn').addEventListener('click', () => {
       loadGatePasses().catch((e) => console.error(e));

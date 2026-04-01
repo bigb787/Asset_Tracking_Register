@@ -103,6 +103,13 @@ body {
   flex-wrap: wrap;
 }
 
+.section-switcher {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
 .form-help {
   color: var(--muted);
   font-size: 0.85rem;
@@ -149,6 +156,11 @@ textarea {
 
 .btn.secondary:hover {
   background: rgba(91, 159, 212, 0.12);
+}
+
+.btn.secondary.active {
+  background: rgba(91, 159, 212, 0.18);
+  color: var(--text);
 }
 
 .btn.danger {
