@@ -154,6 +154,8 @@ let currentTable = TABLES[0];
 let editingRowId = null;
 let currentRows = [];
 let editingGatepassId = null;
+let currentTableSearch = '';
+let currentGatepassSearch = '';
 
 function getRegisterFormSection() {
   return $('#dynamic-form').closest('section');
@@ -192,6 +194,10 @@ function normalizeDisplayValue(value) {
 
 function summarizeImportResult(result) {
   const parts = [`Imported: ${result.imported || 0}`, `Skipped: ${result.skipped || 0}`];
+  if (result.skippedRows?.length) {
+    parts.push(`Skipped rows: ${result.skippedRows.length}`);
+    parts.push(result.skippedRows.slice(0, 5).join('\n'));
+  }
   if (result.errors?.length) {
     parts.push(`Errors: ${result.errors.length}`);
     parts.push(result.errors.slice(0, 5).join('\n'));
@@ -257,6 +263,9 @@ async function setCurrentTable(tableKey) {
   if (!selected) return;
   currentTable = selected;
   $('#table-select').value = currentTable.key;
+  if (currentTable.key !== 'gatepasses') {
+    $('#table-search-input').value = currentTableSearch;
+  }
   updateSectionSwitcher();
   renderDynamicForm();
   await refresh();
@@ -279,11 +288,15 @@ function renderDynamicForm() {
     registerFormSection.classList.add('hidden');
     registerTableSection.classList.add('hidden');
     $('#table-import-btn').disabled = true;
+    $('#table-search-btn').disabled = true;
+    $('#table-search-clear-btn').disabled = true;
     return;
   }
   registerFormSection.classList.remove('hidden');
   registerTableSection.classList.remove('hidden');
   $('#table-import-btn').disabled = false;
+  $('#table-search-btn').disabled = false;
+  $('#table-search-clear-btn').disabled = false;
   const rowActionHelp =
     currentTable.key === 'laptops'
       ? 'After saving, each row will show Edit Row and Delete Row in the first column.'
@@ -316,7 +329,9 @@ async function loadCurrentTable() {
     currentRows = [];
     return;
   }
-  const rows = await fetchJSON(`/api/register/${currentTable.key}`);
+  const q = new URLSearchParams();
+  if (currentTableSearch) q.set('search', currentTableSearch);
+  const rows = await fetchJSON(`/api/register/${currentTable.key}?${q.toString()}`);
   currentRows = rows;
   const head = $('#data-head');
   const body = $('#data-rows');
@@ -375,6 +390,7 @@ async function loadGatePasses() {
   const outDateTo = ($('#gp-out-date-to').value || '').trim();
   const q = new URLSearchParams();
   q.set('status', status);
+  if (currentGatepassSearch) q.set('search', currentGatepassSearch);
   if (laptopId) q.set('laptop_id', laptopId);
   if (outDateFrom) q.set('out_date_from', outDateFrom);
   if (outDateTo) q.set('out_date_to', outDateTo);
@@ -713,6 +729,36 @@ async function bootstrap() {
       } catch (err) {
         alert(err.message);
       }
+    });
+    $('#table-search-btn').addEventListener('click', () => {
+      currentTableSearch = ($('#table-search-input').value || '').trim();
+      refresh().catch((e) => console.error(e));
+    });
+    $('#table-search-clear-btn').addEventListener('click', () => {
+      currentTableSearch = '';
+      $('#table-search-input').value = '';
+      refresh().catch((e) => console.error(e));
+    });
+    $('#table-search-input').addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Enter') return;
+      ev.preventDefault();
+      currentTableSearch = (ev.target.value || '').trim();
+      refresh().catch((e) => console.error(e));
+    });
+    $('#gp-search-btn').addEventListener('click', () => {
+      currentGatepassSearch = ($('#gp-search-input').value || '').trim();
+      loadGatePasses().catch((e) => console.error(e));
+    });
+    $('#gp-search-clear-search-btn').addEventListener('click', () => {
+      currentGatepassSearch = '';
+      $('#gp-search-input').value = '';
+      loadGatePasses().catch((e) => console.error(e));
+    });
+    $('#gp-search-input').addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Enter') return;
+      ev.preventDefault();
+      currentGatepassSearch = (ev.target.value || '').trim();
+      loadGatePasses().catch((e) => console.error(e));
     });
     updateSectionSwitcher();
     renderDynamicForm();

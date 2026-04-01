@@ -216,6 +216,7 @@ function buildGatepassFilters(query) {
   const laptopId = query.laptop_id ? parseInt(String(query.laptop_id), 10) : null;
   const outDateFrom = String(query.out_date_from || '').trim();
   const outDateTo = String(query.out_date_to || '').trim();
+  const search = String(query.search || '').trim();
   const clauses = [];
   const params = [];
   if (status && status !== 'all') {
@@ -233,6 +234,19 @@ function buildGatepassFilters(query) {
   if (outDateTo) {
     clauses.push('g.out_date <= ?');
     params.push(outDateTo);
+  }
+  if (search) {
+    const searchClauses = [
+      'COALESCE(g.gatepass_no, \'\') LIKE ?',
+      'COALESCE(CAST(g.laptop_id AS TEXT), \'\') LIKE ?',
+      'COALESCE(l.service_tag, \'\') LIKE ?',
+      'COALESCE(g.issued_to, \'\') LIKE ?',
+      'COALESCE(g.purpose, \'\') LIKE ?',
+      'COALESCE(g.status, \'\') LIKE ?',
+      'COALESCE(g.gatepass_type, \'\') LIKE ?',
+    ];
+    clauses.push(`(${searchClauses.join(' OR ')})`);
+    params.push(...searchClauses.map(() => `%${search}%`));
   }
   return {
     where: clauses.length ? `WHERE ${clauses.join(' AND ')}` : '',
@@ -253,6 +267,25 @@ const TABLE_CONFIG = {
   scanners_and_others: { uniqueField: 's_n' },
   admin_assets: { uniqueField: 'invoice_no' },
 };
+
+function getRegisterExportConfig(table) {
+  return REGISTER_EXPORTS.find((entry) => entry.key === table) || null;
+}
+
+function buildRegisterSearch(table, query) {
+  const search = String(query || '').trim();
+  const exportConfig = getRegisterExportConfig(table);
+  if (!search || !exportConfig) {
+    return { where: '', params: [] };
+  }
+  const searchColumns = exportConfig.columns.map((column) => column.key);
+  const clauses = searchColumns.map((column) => `COALESCE(CAST(${column} AS TEXT), '') LIKE ?`);
+  const params = searchColumns.map(() => `%${search}%`);
+  return {
+    where: `WHERE ${clauses.join(' OR ')}`,
+    params,
+  };
+}
 
 const REGISTER_EXPORTS = [
   {
@@ -547,7 +580,7 @@ function importRegisterRow(table, cfg, rawRow, authUser) {
     }
     row[cfg.uniqueField] = uniqueValue;
     if (existsByUniqueField(table, cfg.uniqueField, uniqueValue)) {
-      return { skipped: `${cfg.uniqueField} already exists` };
+      return { skipped: `${cfg.uniqueField} already exists (${uniqueValue})` };
     }
   }
   const keys = Object.keys(row).filter((key) => row[key] !== undefined);
@@ -1322,7 +1355,8 @@ app.get('/api/laptop-gatepasses/:id/pdf', (req, res) => {
 app.get('/api/register/:table', (req, res) => {
   const table = req.params.table;
   if (!TABLE_CONFIG[table]) return res.status(404).json({ error: 'table not found' });
-  const rows = db.prepare(`SELECT * FROM ${table} ORDER BY id DESC`).all();
+  const { where, params } = buildRegisterSearch(table, req.query.search);
+  const rows = db.prepare(`SELECT * FROM ${table} ${where} ORDER BY id DESC`).all(...params);
   res.json(rows);
 });
 
@@ -1359,6 +1393,7 @@ app.post('/api/import/:table', upload.single('file'), async (req, res) => {
   const summary = {
     imported: 0,
     skipped: 0,
+    skippedRows: [],
     errors: [],
   };
 
@@ -1374,6 +1409,7 @@ app.post('/api/import/:table', upload.single('file'), async (req, res) => {
         }
         if (result.skipped) {
           summary.skipped += 1;
+          summary.skippedRows.push(`Row ${row.rowNumber}: ${result.skipped}`);
           return;
         }
         if (result.error) {
@@ -1390,6 +1426,7 @@ app.post('/api/import/:table', upload.single('file'), async (req, res) => {
     ok: true,
     imported: summary.imported,
     skipped: summary.skipped,
+    skippedRows: summary.skippedRows,
     errors: summary.errors,
   });
 });
