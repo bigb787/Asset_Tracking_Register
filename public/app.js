@@ -129,6 +129,18 @@ const TABLES = [
   },
 ];
 
+/** When the UI is served under a path prefix (e.g. https://host/asset-register/), set
+ * <meta name="asset-register-base" content="/asset-register" /> in index.html. Leave empty at site root. */
+const APP_BASE = (
+  document.querySelector('meta[name="asset-register-base"]')?.getAttribute('content') || ''
+)
+  .trim()
+  .replace(/\/$/, '');
+function apiUrl(path) {
+  const p = path.startsWith('/') ? path : `/${path}`;
+  return `${APP_BASE}${p}`;
+}
+
 const AUTH_TOKEN_KEY = 'asset_register_jwt';
 
 function getAuthToken() {
@@ -219,7 +231,7 @@ async function openAuthenticatedHtml(url) {
 }
 
 async function getSessionUser() {
-  const res = await fetch('/api/auth/session', buildFetchInit());
+  const res = await fetch(apiUrl('/api/auth/session'), buildFetchInit());
   const text = await res.text();
   let data = null;
   try {
@@ -258,7 +270,7 @@ async function fetchJSON(url, opts) {
 
 async function loginWithPassword(username, password) {
   const res = await fetch(
-    '/api/auth/login',
+    apiUrl('/api/auth/login'),
     buildFetchInit({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -467,7 +479,7 @@ function summarizeImportResult(result) {
 async function uploadImport(tableKey, file) {
   const formData = new FormData();
   formData.append('file', file);
-  return fetchJSON(`/api/import/${tableKey}`, {
+  return fetchJSON(apiUrl(`/api/import/${tableKey}`), {
     method: 'POST',
     body: formData,
   });
@@ -570,7 +582,7 @@ async function loadCurrentTable() {
   if (currentTable.key === 'laptops' && laptopStatusFilter && laptopStatusFilter !== 'all') {
     q.set('status', laptopStatusFilter);
   }
-  const rows = await fetchJSON(`/api/register/${currentTable.key}?${q.toString()}`);
+  const rows = await fetchJSON(apiUrl(`/api/register/${currentTable.key}?${q.toString()}`));
   if (!Array.isArray(rows)) {
     throw new Error('Server returned invalid data for this table (expected a list).');
   }
@@ -636,8 +648,8 @@ async function loadGatePasses() {
   if (laptopId) q.set('laptop_id', laptopId);
   if (outDateFrom) q.set('out_date_from', outDateFrom);
   if (outDateTo) q.set('out_date_to', outDateTo);
-  $('#gp-export-link').href = `/api/export/gatepasses.xlsx?${q.toString()}`;
-  const rows = await fetchJSON(`/api/laptop-gatepasses?${q.toString()}`);
+  $('#gp-export-link').href = apiUrl(`/api/export/gatepasses.xlsx?${q.toString()}`);
+  const rows = await fetchJSON(apiUrl(`/api/laptop-gatepasses?${q.toString()}`));
   if (!Array.isArray(rows)) {
     throw new Error('Server returned invalid data for gate passes (expected a list).');
   }
@@ -686,13 +698,13 @@ async function loadGatePasses() {
   tbody.querySelectorAll('.gp-print').forEach((btn) => {
     btn.addEventListener('click', (ev) => {
       const id = ev.target.getAttribute('data-id');
-      openAuthenticatedHtml(`/api/laptop-gatepasses/${id}/print`).catch((e) => alert(e.message));
+      openAuthenticatedHtml(apiUrl(`/api/laptop-gatepasses/${id}/print`)).catch((e) => alert(e.message));
     });
   });
   tbody.querySelectorAll('.gp-pdf').forEach((btn) => {
     btn.addEventListener('click', (ev) => {
       const id = ev.target.getAttribute('data-id');
-      downloadAuthenticatedFile(`/api/laptop-gatepasses/${id}/pdf`, `gatepass-${id}.pdf`).catch((e) =>
+      downloadAuthenticatedFile(apiUrl(`/api/laptop-gatepasses/${id}/pdf`), `gatepass-${id}.pdf`).catch((e) =>
         alert(e.message)
       );
     });
@@ -730,7 +742,7 @@ function renderGatepassBadges(rows) {
 
 async function loadAudit() {
   const auditTable = currentTable.key === 'gatepasses' ? 'laptop_gatepasses' : currentTable.key;
-  const entries = await fetchJSON(`/api/audit?limit=20&table=${encodeURIComponent(auditTable)}`);
+  const entries = await fetchJSON(apiUrl(`/api/audit?limit=20&table=${encodeURIComponent(auditTable)}`));
   if (!Array.isArray(entries)) {
     throw new Error('Server returned invalid data for audit (expected a list).');
   }
@@ -821,7 +833,7 @@ document.querySelector('#login-submit-btn')?.addEventListener('click', () => {
 $('#logout-btn').addEventListener('click', async () => {
   clearAuthToken();
   try {
-    await fetch('/api/auth/logout', buildFetchInit({ method: 'POST' }));
+    await fetch(apiUrl('/api/auth/logout'), buildFetchInit({ method: 'POST' }));
   } catch (_e) {
     /* ignore */
   }
@@ -835,7 +847,7 @@ $('#dynamic-form').addEventListener('submit', async (ev) => {
   const fd = new FormData(ev.target);
   const body = Object.fromEntries(fd.entries());
   try {
-    await fetchJSON(`/api/register/${currentTable.key}`, {
+    await fetchJSON(apiUrl(`/api/register/${currentTable.key}`), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -852,7 +864,7 @@ async function onDeleteRow(ev) {
   const id = ev.target.getAttribute('data-id');
   if (!confirm(`Delete this ${currentTable.label} record?`)) return;
   try {
-    const res = await fetch(`/api/register/${currentTable.key}/${id}`, buildFetchInit({ method: 'DELETE' }));
+    const res = await fetch(apiUrl(`/api/register/${currentTable.key}/${id}`), buildFetchInit({ method: 'DELETE' }));
     if (!res.ok) {
       const text = await res.text();
       let msg = res.statusText;
@@ -885,7 +897,7 @@ async function onSaveRow(ev) {
     patch[input.getAttribute('data-key')] = input.value.trim();
   });
   try {
-    await fetchJSON(`/api/register/${currentTable.key}/${id}`, {
+    await fetchJSON(apiUrl(`/api/register/${currentTable.key}/${id}`), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
@@ -917,12 +929,12 @@ async function onCreateLaptopGatepass(ev) {
   const fd = new FormData($('#gatepass-form'));
   const body = Object.fromEntries(fd.entries());
   try {
-    const gp = await fetchJSON('/api/laptop-gatepasses', {
+    const gp = await fetchJSON(apiUrl('/api/laptop-gatepasses'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    openAuthenticatedHtml(`/api/laptop-gatepasses/${gp.id}/print`).catch((e) => alert(e.message));
+    openAuthenticatedHtml(apiUrl(`/api/laptop-gatepasses/${gp.id}/print`)).catch((e) => alert(e.message));
     alert(`Gate pass created: ${gp.gatepass_no}`);
     $('#gatepass-form').reset();
     $('#gp-out-date').value = new Date().toISOString().slice(0, 10);
@@ -947,7 +959,7 @@ async function onSaveGatepass(ev) {
     patch[input.getAttribute('data-key')] = input.value.trim();
   });
   try {
-    await fetchJSON(`/api/laptop-gatepasses/${id}`, {
+    await fetchJSON(apiUrl(`/api/laptop-gatepasses/${id}`), {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(patch),
@@ -969,7 +981,7 @@ async function onDeleteGatepass(ev) {
   const id = ev.target.getAttribute('data-id');
   if (!confirm('Delete this gatepass?')) return;
   try {
-    const res = await fetch(`/api/laptop-gatepasses/${id}`, buildFetchInit({ method: 'DELETE' }));
+    const res = await fetch(apiUrl(`/api/laptop-gatepasses/${id}`), buildFetchInit({ method: 'DELETE' }));
     if (!res.ok) {
       const text = await res.text();
       let msg = res.statusText;
@@ -999,10 +1011,17 @@ async function bootstrap() {
   renderWorkspaceGrid('');
   showHome();
   document.querySelectorAll('a.js-auth-download').forEach((a) => {
+    const h = a.getAttribute('href');
+    if (h && h !== '#' && h.startsWith('/api/')) {
+      const q = h.includes('?') ? h.slice(h.indexOf('?')) : '';
+      a.href = apiUrl(h.split('?')[0]) + q;
+    }
+  });
+  document.querySelectorAll('a.js-auth-download').forEach((a) => {
     a.addEventListener('click', (ev) => {
       ev.preventDefault();
       const href = a.getAttribute('href');
-      if (!href) return;
+      if (!href || href === '#') return;
       downloadAuthenticatedFile(href, 'export.xlsx').catch((e) => alert(e.message));
     });
   });
@@ -1084,7 +1103,7 @@ async function bootstrap() {
     $('#gp-laptop-filter').value = '';
     $('#gp-out-date-from').value = '';
     $('#gp-out-date-to').value = '';
-    $('#gp-export-link').href = '/api/export/gatepasses.xlsx';
+    $('#gp-export-link').href = apiUrl('/api/export/gatepasses.xlsx');
     loadGatePasses().catch((e) => console.error(e));
   });
   $('#gp-laptop-filter').addEventListener('change', () => {
@@ -1106,11 +1125,14 @@ async function bootstrap() {
   $('#gp-type').value = 'temporary';
 
   let user = await getSessionUser();
-  if (!user && getAuthToken()) {
+  if (!user) {
+    await new Promise((r) => setTimeout(r, 0));
     user = await getSessionUser();
   }
   if (user) {
     showApp(user);
+    showHome();
+    renderWorkspaceGrid(String(document.querySelector('#wsSearch')?.value || ''));
     try {
       await refresh();
     } catch (_e) {
