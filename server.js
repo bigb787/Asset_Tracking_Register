@@ -29,6 +29,11 @@ app.use('/api', (_req, res, next) => {
   next();
 });
 const publicDir = path.join(__dirname, 'public');
+// Browsers request /favicon.ico by default; serve SVG so the tab icon works without a binary .ico file.
+app.get('/favicon.ico', (_req, res) => {
+  res.type('image/svg+xml');
+  res.sendFile(path.join(publicDir, 'favicon.svg'));
+});
 app.use(
   express.static(publicDir, {
     setHeaders(res, filePath) {
