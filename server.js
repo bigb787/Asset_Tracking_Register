@@ -13,6 +13,7 @@ const AUTH_COOKIE = 'asset_register_auth';
 const AUTH_SECRET = process.env.AUTH_SECRET || 'replace-this-in-production';
 const DEFAULT_ADMIN_USERNAME = process.env.DEFAULT_ADMIN_USERNAME || 'admin';
 const DEFAULT_ADMIN_PASSWORD = process.env.DEFAULT_ADMIN_PASSWORD || 'ChangeMe123!';
+const ADMIN_RESET_TOKEN = process.env.ADMIN_RESET_TOKEN || '';
 const upload = multer({ storage: multer.memoryStorage() });
 
 app.use(express.json());
@@ -54,6 +55,20 @@ function requireAuth(req, res, next) {
   }
 }
 
+function requireAdminResetToken(req, res, next) {
+  if (!ADMIN_RESET_TOKEN) {
+    return res.status(503).json({ error: 'admin reset not configured' });
+  }
+  const token =
+    String(req.headers['x-admin-reset-token'] || '').trim() ||
+    String(req.query.token || '').trim() ||
+    String(req.body?.token || '').trim();
+  if (!token || token !== ADMIN_RESET_TOKEN) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+  return next();
+}
+
 app.post('/api/auth/login', (req, res) => {
   const username = String(req.body?.username || '').trim();
   const password = String(req.body?.password || '');
@@ -73,6 +88,51 @@ app.post('/api/auth/login', (req, res) => {
   );
   res.cookie(AUTH_COOKIE, token, authCookieOptions());
   res.json({ ok: true, user: { id: user.id, username: user.username, role: user.role } });
+});
+
+// --- Admin recovery (token-protected) ---
+app.post('/api/admin/reset-admin', requireAdminResetToken, (req, res) => {
+  const username = String(req.body?.username || DEFAULT_ADMIN_USERNAME).trim();
+  const password = String(req.body?.password || DEFAULT_ADMIN_PASSWORD);
+  if (!username || !password) {
+    return res.status(400).json({ error: 'username and password are required' });
+  }
+  const passwordHash = bcrypt.hashSync(password, 10);
+  const existing = db.prepare('SELECT id FROM auth_users WHERE username = ?').get(username);
+  if (existing) {
+    db.prepare("UPDATE auth_users SET password_hash = ? WHERE username = ?").run(passwordHash, username);
+    return res.json({ ok: true, action: 'updated', username });
+  }
+  db.prepare('INSERT INTO auth_users (username, password_hash, role) VALUES (?, ?, ?)').run(
+    username,
+    passwordHash,
+    'admin'
+  );
+  return res.json({ ok: true, action: 'created', username });
+});
+
+app.post('/api/admin/reset-db', requireAdminResetToken, (req, res) => {
+  const confirm = String(req.query.confirm || req.body?.confirm || '').trim();
+  if (confirm !== 'YES') {
+    return res.status(400).json({ error: 'confirm=YES is required' });
+  }
+  const tablesToClear = [
+    'audit_trail',
+    'auth_users',
+    'users',
+    'assets',
+    ...Object.keys(TABLE_CONFIG),
+    'laptop_gatepasses',
+  ];
+
+  const tx = db.transaction(() => {
+    tablesToClear.forEach((t) => {
+      db.prepare(`DELETE FROM ${t}`).run();
+    });
+  });
+  tx();
+  ensureDefaultAuthUser();
+  res.json({ ok: true, cleared_tables: tablesToClear.length });
 });
 
 app.post('/api/auth/logout', (_req, res) => {
