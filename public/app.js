@@ -129,8 +129,21 @@ const TABLES = [
   },
 ];
 
+async function getSessionUser() {
+  const res = await fetch('/api/auth/session', { credentials: 'same-origin' });
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    return null;
+  }
+  if (!res.ok || !data?.user) return null;
+  return data.user;
+}
+
 async function fetchJSON(url, opts) {
-  const res = await fetch(url, opts);
+  const res = await fetch(url, { credentials: 'same-origin', ...opts });
   const text = await res.text();
   let data = null;
   try {
@@ -318,10 +331,13 @@ function renderGatepassInput(key, value) {
   return `<input class="row-edit-input" data-key="${escapeHtml(key)}" value="${escapeHtml(value ?? '')}" />`;
 }
 
+let tableSelectChangeWired = false;
 function renderTableSelector() {
   const select = $('#table-select');
   select.innerHTML = TABLES.map((t) => `<option value="${t.key}">${escapeHtml(t.label)}</option>`).join('');
   select.value = currentTable.key;
+  if (tableSelectChangeWired) return;
+  tableSelectChangeWired = true;
   select.addEventListener('change', async (ev) => {
     const selected = TABLES.find((t) => t.key === ev.target.value);
     if (!selected) return;
@@ -562,6 +578,7 @@ $('#login-form').addEventListener('submit', async (ev) => {
       }),
     });
     showApp(data.user);
+    showHome();
     ev.target.reset();
     await refresh();
   } catch (err) {
@@ -739,118 +756,124 @@ async function onDeleteGatepass(ev) {
 }
 
 async function bootstrap() {
-  try {
-    const session = await fetchJSON('/api/auth/session');
-    showApp(session.user);
-    renderTableSelector();
-    $('#ws-back-btn').addEventListener('click', () => {
-      showHome();
-    });
-    $('#wsSearch').addEventListener('input', (ev) => {
-      renderWorkspaceGrid(ev.target.value);
-    });
-    renderWorkspaceGrid('');
+  const user = await getSessionUser();
+
+  renderTableSelector();
+  $('#ws-back-btn').addEventListener('click', () => {
     showHome();
-    $('#table-import-btn').addEventListener('click', async () => {
-      if (currentTable.key === 'gatepasses') return;
-      const file = $('#table-import-file').files?.[0];
-      if (!file) {
-        alert('Choose an Excel file first.');
-        return;
-      }
-      try {
-        const result = await uploadImport(currentTable.key, file);
-        $('#table-import-file').value = '';
-        await refresh();
-        alert(summarizeImportResult(result));
-      } catch (err) {
-        alert(err.message);
-      }
-    });
-    $('#gp-import-btn').addEventListener('click', async () => {
-      const file = $('#gp-import-file').files?.[0];
-      if (!file) {
-        alert('Choose an Excel file first.');
-        return;
-      }
-      try {
-        const result = await uploadImport('gatepasses', file);
-        $('#gp-import-file').value = '';
-        await refresh();
-        alert(summarizeImportResult(result));
-      } catch (err) {
-        alert(err.message);
-      }
-    });
-    $('#table-search-btn').addEventListener('click', () => {
-      currentTableSearch = ($('#table-search-input').value || '').trim();
-      refresh().catch((e) => console.error(e));
-    });
-    $('#table-search-clear-btn').addEventListener('click', () => {
-      currentTableSearch = '';
-      $('#table-search-input').value = '';
-      refresh().catch((e) => console.error(e));
-    });
-    $('#table-search-input').addEventListener('keydown', (ev) => {
-      if (ev.key !== 'Enter') return;
-      ev.preventDefault();
-      currentTableSearch = (ev.target.value || '').trim();
-      refresh().catch((e) => console.error(e));
-    });
-    $('#laptop-status-filter').addEventListener('change', (ev) => {
-      laptopStatusFilter = String(ev.target.value || 'all');
-      refresh().catch((e) => console.error(e));
-    });
-    $('#gp-search-btn').addEventListener('click', () => {
-      currentGatepassSearch = ($('#gp-search-input').value || '').trim();
-      loadGatePasses().catch((e) => console.error(e));
-    });
-    $('#gp-search-clear-search-btn').addEventListener('click', () => {
-      currentGatepassSearch = '';
-      $('#gp-search-input').value = '';
-      loadGatePasses().catch((e) => console.error(e));
-    });
-    $('#gp-search-input').addEventListener('keydown', (ev) => {
-      if (ev.key !== 'Enter') return;
-      ev.preventDefault();
-      currentGatepassSearch = (ev.target.value || '').trim();
-      loadGatePasses().catch((e) => console.error(e));
-    });
-    updateSectionSwitcher();
-    renderDynamicForm();
-    $('#gp-refresh-btn').addEventListener('click', () => {
-      loadGatePasses().catch((e) => console.error(e));
-    });
-    $('#gp-status-filter').addEventListener('change', () => {
-      loadGatePasses().catch((e) => console.error(e));
-    });
-    $('#gp-clear-btn').addEventListener('click', () => {
-      $('#gp-status-filter').value = 'all';
-      $('#gp-laptop-filter').value = '';
-      $('#gp-out-date-from').value = '';
-      $('#gp-out-date-to').value = '';
-      $('#gp-export-link').href = '/api/export/gatepasses.xlsx';
-      loadGatePasses().catch((e) => console.error(e));
-    });
-    $('#gp-laptop-filter').addEventListener('change', () => {
-      loadGatePasses().catch((e) => console.error(e));
-    });
-    $('#gp-out-date-from').addEventListener('change', () => {
-      loadGatePasses().catch((e) => console.error(e));
-    });
-    $('#gp-out-date-to').addEventListener('change', () => {
-      loadGatePasses().catch((e) => console.error(e));
-    });
-    $('#gatepass-form').addEventListener('submit', (ev) => {
-      onCreateLaptopGatepass(ev).catch((e) => console.error(e));
-    });
-    $('#gp-service-tag').addEventListener('change', (ev) => {
-      fillGatepassFromServiceTag(ev.target.value);
-    });
-    $('#gp-out-date').value = new Date().toISOString().slice(0, 10);
-    $('#gp-type').value = 'temporary';
-    await refresh();
-  } catch (_e) {
+  });
+  $('#wsSearch').addEventListener('input', (ev) => {
+    renderWorkspaceGrid(ev.target.value);
+  });
+  renderWorkspaceGrid('');
+  showHome();
+  $('#table-import-btn').addEventListener('click', async () => {
+    if (currentTable.key === 'gatepasses') return;
+    const file = $('#table-import-file').files?.[0];
+    if (!file) {
+      alert('Choose an Excel file first.');
+      return;
+    }
+    try {
+      const result = await uploadImport(currentTable.key, file);
+      $('#table-import-file').value = '';
+      await refresh();
+      alert(summarizeImportResult(result));
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+  $('#gp-import-btn').addEventListener('click', async () => {
+    const file = $('#gp-import-file').files?.[0];
+    if (!file) {
+      alert('Choose an Excel file first.');
+      return;
+    }
+    try {
+      const result = await uploadImport('gatepasses', file);
+      $('#gp-import-file').value = '';
+      await refresh();
+      alert(summarizeImportResult(result));
+    } catch (err) {
+      alert(err.message);
+    }
+  });
+  $('#table-search-btn').addEventListener('click', () => {
+    currentTableSearch = ($('#table-search-input').value || '').trim();
+    refresh().catch((e) => console.error(e));
+  });
+  $('#table-search-clear-btn').addEventListener('click', () => {
+    currentTableSearch = '';
+    $('#table-search-input').value = '';
+    refresh().catch((e) => console.error(e));
+  });
+  $('#table-search-input').addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Enter') return;
+    ev.preventDefault();
+    currentTableSearch = (ev.target.value || '').trim();
+    refresh().catch((e) => console.error(e));
+  });
+  $('#laptop-status-filter').addEventListener('change', (ev) => {
+    laptopStatusFilter = String(ev.target.value || 'all');
+    refresh().catch((e) => console.error(e));
+  });
+  $('#gp-search-btn').addEventListener('click', () => {
+    currentGatepassSearch = ($('#gp-search-input').value || '').trim();
+    loadGatePasses().catch((e) => console.error(e));
+  });
+  $('#gp-search-clear-search-btn').addEventListener('click', () => {
+    currentGatepassSearch = '';
+    $('#gp-search-input').value = '';
+    loadGatePasses().catch((e) => console.error(e));
+  });
+  $('#gp-search-input').addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Enter') return;
+    ev.preventDefault();
+    currentGatepassSearch = (ev.target.value || '').trim();
+    loadGatePasses().catch((e) => console.error(e));
+  });
+  updateSectionSwitcher();
+  renderDynamicForm();
+  $('#gp-refresh-btn').addEventListener('click', () => {
+    loadGatePasses().catch((e) => console.error(e));
+  });
+  $('#gp-status-filter').addEventListener('change', () => {
+    loadGatePasses().catch((e) => console.error(e));
+  });
+  $('#gp-clear-btn').addEventListener('click', () => {
+    $('#gp-status-filter').value = 'all';
+    $('#gp-laptop-filter').value = '';
+    $('#gp-out-date-from').value = '';
+    $('#gp-out-date-to').value = '';
+    $('#gp-export-link').href = '/api/export/gatepasses.xlsx';
+    loadGatePasses().catch((e) => console.error(e));
+  });
+  $('#gp-laptop-filter').addEventListener('change', () => {
+    loadGatePasses().catch((e) => console.error(e));
+  });
+  $('#gp-out-date-from').addEventListener('change', () => {
+    loadGatePasses().catch((e) => console.error(e));
+  });
+  $('#gp-out-date-to').addEventListener('change', () => {
+    loadGatePasses().catch((e) => console.error(e));
+  });
+  $('#gatepass-form').addEventListener('submit', (ev) => {
+    onCreateLaptopGatepass(ev).catch((e) => console.error(e));
+  });
+  $('#gp-service-tag').addEventListener('change', (ev) => {
+    fillGatepassFromServiceTag(ev.target.value);
+  });
+  $('#gp-out-date').value = new Date().toISOString().slice(0, 10);
+  $('#gp-type').value = 'temporary';
+
+  if (user) {
+    showApp(user);
+    try {
+      await refresh();
+    } catch (_e) {
+      showLogin();
+    }
+  } else {
     showLogin();
   }
 }

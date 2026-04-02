@@ -9,6 +9,9 @@ const { db, insertAuditTrail } = require('./database');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+if (process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true') {
+  app.set('trust proxy', 1);
+}
 const AUTH_COOKIE = 'asset_register_auth';
 const AUTH_SECRET = process.env.AUTH_SECRET || 'replace-this-in-production';
 const DEFAULT_ADMIN_USERNAME = process.env.DEFAULT_ADMIN_USERNAME || 'admin';
@@ -34,11 +37,19 @@ function ensureDefaultAuthUser() {
   );
 }
 
+function authCookieSecureFlag() {
+  const override = String(process.env.AUTH_COOKIE_SECURE || '').toLowerCase();
+  if (override === '0' || override === 'false') return false;
+  if (override === '1' || override === 'true') return true;
+  return process.env.NODE_ENV === 'production';
+}
+
 function authCookieOptions() {
   return {
     httpOnly: true,
     sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
+    secure: authCookieSecureFlag(),
+    path: '/',
     maxAge: 1000 * 60 * 60 * 12,
   };
 }
