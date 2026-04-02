@@ -32,25 +32,27 @@
         <div class="page-sub" id="auth-user"></div>
       </div>
       <div class="topbar-actions">
-        <a class="ghost-btn js-auth-download" href="/api/export/assets.xlsx">Export all tables</a>
+        <a class="ghost-btn js-auth-download" href="/api/export/assets.xlsx" id="topbar-export-link">Export all tables</a>
         <button id="logout-btn" type="button" class="ghost-btn">Logout</button>
       </div>
     </header>
 
     <!-- Screen 1: Workspace selector -->
     <section id="homeScreen" class="screen">
-      <div class="home-topbar">
-        <div class="home-title">Asset workspaces</div>
-        <div class="home-actions">
-          <div class="search-home">
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.4;flex-shrink:0;"><circle cx="7" cy="7" r="4"/><path d="M11 11l2.5 2.5"/></svg>
-            <input id="wsSearch" placeholder="Search workspaces…" />
+      <div class="screen-inner screen-inner--home">
+        <div class="home-topbar">
+          <div class="home-title">Asset workspaces</div>
+          <div class="home-actions">
+            <div class="search-home">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.4;flex-shrink:0;"><circle cx="7" cy="7" r="4"/><path d="M11 11l2.5 2.5"/></svg>
+              <input id="wsSearch" placeholder="Search workspaces…" />
+            </div>
+            <button type="button" class="ghost-btn ws-new-workspace-btn" disabled title="Coming soon">New workspace</button>
           </div>
         </div>
+        <div class="home-sub">Select a workspace to view and manage its asset register.</div>
+        <div class="grid" id="wsGrid"></div>
       </div>
-      <div class="home-sub">Select a workspace to view and manage its asset register.</div>
-      <p class="home-hint">Click a card below to open that table. Use <strong>All workspaces</strong> (top left) on the next screen to come back here.</p>
-      <div class="grid" id="wsGrid"></div>
     </section>
 
     <!-- Screen 2: Asset register table view -->
@@ -161,9 +163,7 @@
         <ul id="audit-list" class="audit"></ul>
       </details>
 
-      <!-- Keep dynamic form in DOM for existing behavior, but visually tucked away -->
       <section class="hidden">
-        <form id="dynamic-form" class="form-grid"></form>
         <form id="gatepass-form" class="form-grid"></form>
         <button id="gp-back-btn" type="button"></button>
         <input id="gp-service-tag" />

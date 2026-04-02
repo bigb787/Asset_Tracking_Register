@@ -309,6 +309,7 @@ let editingGatepassId = null;
 let currentTableSearch = '';
 let currentGatepassSearch = '';
 let laptopStatusFilter = 'all';
+let wsSearchDebounce = null;
 
 function showHome() {
   $('#homeScreen').classList.remove('hidden');
@@ -393,22 +394,112 @@ function renderWorkspaceGrid(query) {
         aria-label="Open ${escapeHtml(w.name)} workspace">
         <div class="ws-card-top">
           <div class="ws-icon" style="background:${escapeHtml(w.iconBg)};">
-            <svg viewBox="0 0 20 20" fill="${escapeHtml(w.iconColor)}">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="${escapeHtml(w.iconColor)}">
               <rect x="2" y="8" width="16" height="10" rx="1.5"></rect>
               <path d="M1 8l9-6 9 6" fill="none" stroke="${escapeHtml(w.iconColor)}" stroke-width="1.5"></path>
             </svg>
           </div>
-          <div class="ws-arrow" style="opacity:1;color:#185FA5;font-size:18px;margin-top:2px;">→</div>
+          <div class="ws-arrow" aria-hidden="true">→</div>
         </div>
         <div class="ws-name">${escapeHtml(w.name)}</div>
         <div class="ws-loc">${escapeHtml(w.loc)}</div>
+        <div class="ws-stats">
+          <div class="ws-stat">
+            <div class="ws-stat-val" data-ws-stat="total">—</div>
+            <div class="ws-stat-lbl">Total</div>
+          </div>
+          <div class="ws-divider"></div>
+          <div class="ws-stat">
+            <div class="ws-stat-val" data-ws-stat="s1">—</div>
+            <div class="ws-stat-lbl" data-ws-lbl="s1">—</div>
+          </div>
+          <div class="ws-divider"></div>
+          <div class="ws-stat">
+            <div class="ws-stat-val" data-ws-stat="s2">—</div>
+            <div class="ws-stat-lbl" data-ws-lbl="s2">—</div>
+          </div>
+          <div class="ws-divider"></div>
+          <div class="ws-stat">
+            <div class="ws-stat-val" data-ws-stat="s3">—</div>
+            <div class="ws-stat-lbl" data-ws-lbl="s3">—</div>
+          </div>
+        </div>
         <div class="ws-footer">
-          <span class="ws-alert" style="background:#EAF3DE;color:#3B6D11;">Ready</span>
-          <div class="ws-updated">Updated just now</div>
+          <span class="ws-alert">…</span>
+          <div class="ws-updated">Loading…</div>
         </div>
       </div>`
     )
     .join('');
+}
+
+function formatWsSummaryNumber(v) {
+  if (v == null || Number.isNaN(v)) return '—';
+  return String(v);
+}
+
+async function hydrateWorkspaceSummaries() {
+  const cards = document.querySelectorAll('#wsGrid .ws-card[data-key]');
+  await Promise.all(
+    Array.from(cards).map(async (card) => {
+      const key = card.getAttribute('data-key');
+      if (!key) return;
+      try {
+        const s = await fetchJSON(apiUrl(`/api/workspace/${encodeURIComponent(key)}/summary`));
+        const tEl = card.querySelector('[data-ws-stat="total"]');
+        const a1 = card.querySelector('[data-ws-stat="s1"]');
+        const a2 = card.querySelector('[data-ws-stat="s2"]');
+        const a3 = card.querySelector('[data-ws-stat="s3"]');
+        if (tEl) tEl.textContent = formatWsSummaryNumber(s.total);
+        if (a1) a1.textContent = formatWsSummaryNumber(s.s1);
+        if (a2) a2.textContent = formatWsSummaryNumber(s.s2);
+        if (a3) a3.textContent = formatWsSummaryNumber(s.s3);
+        const l1 = card.querySelector('[data-ws-lbl="s1"]');
+        const l2 = card.querySelector('[data-ws-lbl="s2"]');
+        const l3 = card.querySelector('[data-ws-lbl="s3"]');
+        if (l1 && s.lbl1) l1.textContent = s.lbl1;
+        if (l2 && s.lbl2) l2.textContent = s.lbl2;
+        if (l3 && s.lbl3) l3.textContent = s.lbl3;
+        const alertEl = card.querySelector('.ws-alert');
+        const updatedEl = card.querySelector('.ws-updated');
+        if (alertEl) {
+          if (s.alertCount > 0) {
+            alertEl.textContent = `${s.alertCount} need attention`;
+            alertEl.style.background = '#FCEBEB';
+            alertEl.style.color = '#A32D2D';
+          } else {
+            alertEl.textContent = 'All clear';
+            alertEl.style.background = '#EAF3DE';
+            alertEl.style.color = '#3B6D11';
+          }
+        }
+        if (updatedEl) {
+          updatedEl.textContent = `Updated ${new Date().toLocaleTimeString(undefined, {
+            hour: '2-digit',
+            minute: '2-digit',
+          })}`;
+        }
+      } catch (_e) {
+        const alertEl = card.querySelector('.ws-alert');
+        const updatedEl = card.querySelector('.ws-updated');
+        if (alertEl) {
+          alertEl.textContent = 'Summary unavailable';
+          alertEl.style.background = '#f3f4f6';
+          alertEl.style.color = '#5b677a';
+        }
+        if (updatedEl) updatedEl.textContent = '';
+      }
+    })
+  );
+}
+
+function scheduleWorkspaceGridRefresh() {
+  clearTimeout(wsSearchDebounce);
+  wsSearchDebounce = setTimeout(() => {
+    const q = String(document.querySelector('#wsSearch')?.value || '');
+    renderWorkspaceGrid(q);
+    hydrateWorkspaceSummaries().catch((e) => console.error(e));
+  }, 280);
 }
 
 async function openWorkspace(tableKey) {
@@ -554,17 +645,92 @@ async function setCurrentTable(tableKey) {
   await refresh();
 }
 
+function renderAddAssetForm() {
+  const form = $('#dynamic-form');
+  if (!form) return;
+  if (currentTable.key === 'gatepasses') {
+    form.innerHTML = '';
+    return;
+  }
+  const fields = currentTable.fields
+    .map(
+      ([k, label]) =>
+        `<label class="add-field">${escapeHtml(label)}<input name="${escapeHtml(
+          k
+        )}" type="text" autocomplete="off" /></label>
+`
+    )
+    .join('');
+  form.innerHTML = `${fields}<div class="add-form-actions"><button type="submit" class="primary-btn">Save record</button></div>`;
+}
+
+function updateRegScreenStats() {
+  const regStats = $('#reg-stats');
+  const pageInfo = $('#reg-page-info');
+  if (currentTable.key === 'gatepasses') {
+    if (regStats) regStats.classList.add('hidden');
+    if (pageInfo) {
+      pageInfo.textContent = '';
+      pageInfo.classList.add('hidden');
+    }
+    return;
+  }
+  if (regStats) regStats.classList.remove('hidden');
+  if (pageInfo) pageInfo.classList.remove('hidden');
+  const set = (id, v) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = v;
+  };
+  const n = currentRows.length;
+  set('reg-stat-total', String(n));
+  if (currentTable.key === 'laptops') {
+    const norm = (s) => String(s || '').trim().toLowerCase();
+    let a = 0;
+    let b = 0;
+    let c = 0;
+    currentRows.forEach((r) => {
+      const st = norm(r.asset_status);
+      if (st === 'available') a += 1;
+      else if (st === 'allocated') b += 1;
+      else if (st === 'to be scrapped' || st === 'under repairing') c += 1;
+    });
+    set('reg-stat-s1', String(a));
+    set('reg-stat-s2', String(b));
+    set('reg-stat-s3', String(c));
+    set('reg-stat-lbl-s1', 'Available');
+    set('reg-stat-lbl-s2', 'Allocated');
+    set('reg-stat-lbl-s3', 'Attention');
+  } else {
+    set('reg-stat-s1', '—');
+    set('reg-stat-s2', '—');
+    set('reg-stat-s3', '—');
+    set('reg-stat-lbl-s1', '—');
+    set('reg-stat-lbl-s2', '—');
+    set('reg-stat-lbl-s3', '—');
+  }
+  const filtered =
+    Boolean(currentTableSearch) ||
+    (currentTable.key === 'laptops' && laptopStatusFilter && laptopStatusFilter !== 'all');
+  if (pageInfo) {
+    pageInfo.textContent = `Showing ${n} record${n === 1 ? '' : 's'}${filtered ? ' (filtered)' : ''}`;
+  }
+}
+
 function renderDynamicForm() {
   $('#history-title').textContent =
     currentTable.key === 'gatepasses' ? 'Gate Passes History' : `${currentTable.label} History`;
   $('#history-panel').open = false;
+  $('#add-asset-panel')?.classList.add('hidden');
   if (currentTable.key === 'gatepasses') {
     $('#gatepass-panel').classList.remove('hidden');
     $('#asset-table-wrap').classList.add('hidden');
+    $('#reg-add-asset-btn')?.classList.add('hidden');
   } else {
     $('#gatepass-panel').classList.add('hidden');
     $('#asset-table-wrap').classList.remove('hidden');
+    $('#reg-add-asset-btn')?.classList.remove('hidden');
   }
+  renderAddAssetForm();
   if (currentTable.key === 'laptops') {
     $('#laptop-status-filter').classList.remove('hidden');
     $('#laptop-status-filter').value = laptopStatusFilter;
@@ -585,6 +751,7 @@ function renderDynamicForm() {
 async function loadCurrentTable() {
   if (currentTable.key === 'gatepasses') {
     currentRows = [];
+    updateRegScreenStats();
     return;
   }
   const q = new URLSearchParams();
@@ -605,9 +772,12 @@ async function loadCurrentTable() {
   if (!rows.length) {
     const emptyMessage =
       currentTable.key === 'laptops'
-        ? 'No records yet. Add a Laptop record above, then Edit Row and Delete Row buttons will appear here.'
-        : `No records yet. Add a ${escapeHtml(currentTable.label)} record above, then Edit Row and Delete Row buttons will appear here.`;
+        ? 'No records yet. Use Add new asset or Import Excel, then Edit Row / Delete Row will appear here.'
+        : `No records yet. Use Add new asset or Import Excel for ${escapeHtml(
+            currentTable.label
+          )}, then Edit Row / Delete Row will appear here.`;
     body.innerHTML = `<tr><td colspan="${currentTable.fields.length + 1}" class="empty-state">${emptyMessage}</td></tr>`;
+    updateRegScreenStats();
     return;
   }
   body.innerHTML = rows
@@ -644,6 +814,7 @@ async function loadCurrentTable() {
   body.querySelectorAll('.row-delete').forEach((btn) => {
     btn.addEventListener('click', onDeleteRow);
   });
+  updateRegScreenStats();
 }
 
 async function loadGatePasses() {
@@ -802,6 +973,7 @@ async function performLogin() {
     showApp(data.user);
     showHome();
     renderWorkspaceGrid(String(document.querySelector('#wsSearch')?.value || ''));
+    hydrateWorkspaceSummaries().catch((e) => console.error(e));
     if (serverAuthDisabled) $('#logout-btn')?.classList.add('hidden');
     else $('#logout-btn')?.classList.remove('hidden');
     const form = document.querySelector('#login-form');
@@ -1018,11 +1190,14 @@ async function bootstrap() {
   renderTableSelector();
   $('#ws-back-btn').addEventListener('click', () => {
     showHome();
+    renderWorkspaceGrid(String(document.querySelector('#wsSearch')?.value || ''));
+    hydrateWorkspaceSummaries().catch((e) => console.error(e));
   });
-  $('#wsSearch').addEventListener('input', (ev) => {
-    renderWorkspaceGrid(ev.target.value);
+  $('#wsSearch').addEventListener('input', () => {
+    scheduleWorkspaceGridRefresh();
   });
   renderWorkspaceGrid('');
+  hydrateWorkspaceSummaries().catch((e) => console.error(e));
   showHome();
   document.querySelectorAll('a.js-auth-download').forEach((a) => {
     const h = a.getAttribute('href');
@@ -1138,6 +1313,19 @@ async function bootstrap() {
   $('#gp-out-date').value = new Date().toISOString().slice(0, 10);
   $('#gp-type').value = 'temporary';
 
+  $('#reg-add-asset-btn')?.addEventListener('click', () => {
+    const p = $('#add-asset-panel');
+    if (!p || currentTable.key === 'gatepasses') return;
+    const opening = p.classList.contains('hidden');
+    if (opening) {
+      p.classList.remove('hidden');
+      renderAddAssetForm();
+      p.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } else {
+      p.classList.add('hidden');
+    }
+  });
+
   let user = await getSessionUser();
   if (!user) {
     await new Promise((r) => setTimeout(r, 0));
@@ -1147,6 +1335,7 @@ async function bootstrap() {
     showApp(user);
     showHome();
     renderWorkspaceGrid(String(document.querySelector('#wsSearch')?.value || ''));
+    hydrateWorkspaceSummaries().catch((e) => console.error(e));
     if (serverAuthDisabled) {
       $('#logout-btn')?.classList.add('hidden');
     } else {

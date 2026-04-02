@@ -1504,6 +1504,74 @@ app.get('/api/laptop-gatepasses/:id/pdf', (req, res) => {
   res.send(pdf);
 });
 
+/** Card-level stats for workspace selector (totals and breakdown where meaningful). */
+app.get('/api/workspace/:key/summary', (req, res) => {
+  const key = req.params.key;
+  try {
+    if (key === 'gatepasses') {
+      const total = db.prepare('SELECT COUNT(*) AS c FROM laptop_gatepasses').get().c;
+      const rows = db
+        .prepare(
+          `SELECT LOWER(TRIM(COALESCE(status, ''))) AS st, COUNT(*) AS n FROM laptop_gatepasses GROUP BY LOWER(TRIM(COALESCE(status, '')))`
+        )
+        .all();
+      const m = Object.fromEntries(rows.map((r) => [r.st, r.n]));
+      const draft = m.draft || 0;
+      const approved = m.approved || 0;
+      const returned = m.returned || 0;
+      const alertCount = draft;
+      return res.json({
+        total,
+        s1: draft,
+        s2: approved,
+        s3: returned,
+        lbl1: 'Draft',
+        lbl2: 'Approved',
+        lbl3: 'Returned',
+        alertCount,
+      });
+    }
+    if (!TABLE_CONFIG[key]) {
+      return res.status(404).json({ error: 'workspace not found' });
+    }
+    const total = db.prepare(`SELECT COUNT(*) AS c FROM ${key}`).get().c;
+    if (key === 'laptops') {
+      const rows = db
+        .prepare(
+          `SELECT LOWER(TRIM(COALESCE(asset_status, ''))) AS st, COUNT(*) AS n FROM laptops GROUP BY LOWER(TRIM(COALESCE(asset_status, '')))`
+        )
+        .all();
+      const m = Object.fromEntries(rows.map((r) => [r.st, r.n]));
+      const available = m.available || 0;
+      const allocated = m.allocated || 0;
+      const attention = (m['to be scrapped'] || 0) + (m['under repairing'] || 0);
+      return res.json({
+        total,
+        s1: available,
+        s2: allocated,
+        s3: attention,
+        lbl1: 'Available',
+        lbl2: 'Allocated',
+        lbl3: 'Attention',
+        alertCount: attention,
+      });
+    }
+    return res.json({
+      total,
+      s1: null,
+      s2: null,
+      s3: null,
+      lbl1: '—',
+      lbl2: '—',
+      lbl3: '—',
+      alertCount: 0,
+    });
+  } catch (e) {
+    console.error('[workspace summary]', e);
+    return res.status(500).json({ error: 'summary failed' });
+  }
+});
+
 app.get('/api/register/:table', (req, res) => {
   const table = req.params.table;
   if (!TABLE_CONFIG[table]) return res.status(404).json({ error: 'table not found' });
