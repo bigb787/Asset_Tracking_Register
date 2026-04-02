@@ -74,17 +74,38 @@
           </div>
         </div>
         <div class="reg-actions">
+          <button type="button" id="reg-add-asset-btn" class="primary-btn reg-add-btn hidden">Add new asset</button>
           <input id="table-import-file" type="file" accept=".xlsx" class="file" />
           <button id="table-import-btn" type="button" class="ghost-btn">Import Excel</button>
+          <a class="ghost-btn js-auth-download reg-export-btn" href="/api/export/assets.xlsx">Export all tables</a>
         </div>
       </div>
 
-      <div class="toolbar">
+      <div id="reg-stats" class="reg-stats hidden">
+        <div class="reg-stat">
+          <div class="reg-stat-val" id="reg-stat-total">—</div>
+          <div class="reg-stat-lbl">Total records</div>
+        </div>
+        <div class="reg-stat">
+          <div class="reg-stat-val" id="reg-stat-s1">—</div>
+          <div class="reg-stat-lbl" id="reg-stat-lbl-s1">—</div>
+        </div>
+        <div class="reg-stat">
+          <div class="reg-stat-val" id="reg-stat-s2">—</div>
+          <div class="reg-stat-lbl" id="reg-stat-lbl-s2">—</div>
+        </div>
+        <div class="reg-stat">
+          <div class="reg-stat-val" id="reg-stat-s3">—</div>
+          <div class="reg-stat-lbl" id="reg-stat-lbl-s3">—</div>
+        </div>
+      </div>
+
+      <div class="toolbar reg-toolbar">
         <div class="search-box">
           <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.4;flex-shrink:0;"><circle cx="7" cy="7" r="4"/><path d="M11 11l2.5 2.5"/></svg>
-          <input id="table-search-input" placeholder="Search…" />
+          <input id="table-search-input" placeholder="Search this table…" />
         </div>
-        <select id="table-select" class="dd-select"></select>
+        <select id="table-select" class="dd-select hidden" aria-hidden="true"></select>
         <select id="laptop-status-filter" class="dd-select hidden">
           <option value="all">All status</option>
           <option value="available">available</option>
@@ -96,7 +117,13 @@
         <button id="table-search-clear-btn" type="button" class="ghost-btn">Clear</button>
       </div>
 
+      <section id="add-asset-panel" class="add-asset-panel hidden">
+        <div class="add-asset-panel-hd">New record</div>
+        <form id="dynamic-form" class="form-grid add-asset-form"></form>
+      </section>
+
       <div class="table-wrap">
+        <div id="reg-page-info" class="reg-pagination" aria-live="polite"></div>
         <div id="asset-table-wrap">
           <table class="tbl">
             <thead id="data-head"></thead>

@@ -720,15 +720,15 @@ function renderDynamicForm() {
   $('#history-title').textContent =
     currentTable.key === 'gatepasses' ? 'Gate Passes History' : `${currentTable.label} History`;
   $('#history-panel').open = false;
-  $('#add-asset-panel')?.classList.add('hidden');
+  $('#add-asset-panel')?.classList?.add('hidden');
   if (currentTable.key === 'gatepasses') {
     $('#gatepass-panel').classList.remove('hidden');
     $('#asset-table-wrap').classList.add('hidden');
-    $('#reg-add-asset-btn')?.classList.add('hidden');
+    $('#reg-add-asset-btn')?.classList?.add('hidden');
   } else {
     $('#gatepass-panel').classList.add('hidden');
     $('#asset-table-wrap').classList.remove('hidden');
-    $('#reg-add-asset-btn')?.classList.remove('hidden');
+    $('#reg-add-asset-btn')?.classList?.remove('hidden');
   }
   renderAddAssetForm();
   if (currentTable.key === 'laptops') {
@@ -974,8 +974,8 @@ async function performLogin() {
     showHome();
     renderWorkspaceGrid(String(document.querySelector('#wsSearch')?.value || ''));
     hydrateWorkspaceSummaries().catch((e) => console.error(e));
-    if (serverAuthDisabled) $('#logout-btn')?.classList.add('hidden');
-    else $('#logout-btn')?.classList.remove('hidden');
+    if (serverAuthDisabled) $('#logout-btn')?.classList?.add('hidden');
+    else $('#logout-btn')?.classList?.remove('hidden');
     const form = document.querySelector('#login-form');
     if (form) form.reset();
     try {
@@ -1015,7 +1015,7 @@ document.querySelector('#login-submit-btn')?.addEventListener('click', () => {
   performLogin().catch((e) => console.error(e));
 });
 
-$('#logout-btn').addEventListener('click', async () => {
+$('#logout-btn')?.addEventListener('click', async () => {
   if (serverAuthDisabled) return;
   clearAuthToken();
   try {
@@ -1027,7 +1027,7 @@ $('#logout-btn').addEventListener('click', async () => {
   showLogin();
 });
 
-$('#dynamic-form').addEventListener('submit', async (ev) => {
+$('#dynamic-form')?.addEventListener('submit', async (ev) => {
   ev.preventDefault();
   if (currentTable.key === 'gatepasses') return;
   const fd = new FormData(ev.target);
@@ -1337,9 +1337,9 @@ async function bootstrap() {
     renderWorkspaceGrid(String(document.querySelector('#wsSearch')?.value || ''));
     hydrateWorkspaceSummaries().catch((e) => console.error(e));
     if (serverAuthDisabled) {
-      $('#logout-btn')?.classList.add('hidden');
+      $('#logout-btn')?.classList?.add('hidden');
     } else {
-      $('#logout-btn')?.classList.remove('hidden');
+      $('#logout-btn')?.classList?.remove('hidden');
     }
     try {
       await refresh();
