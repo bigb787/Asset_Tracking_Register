@@ -54,8 +54,17 @@ function authCookieOptions() {
   };
 }
 
+function getTokenFromRequest(req) {
+  const auth = String(req.headers.authorization || '').trim();
+  const m = auth.match(/^Bearer\s+(\S+)/i);
+  if (m) return m[1];
+  const c = req.cookies?.[AUTH_COOKIE];
+  if (c && String(c).trim()) return String(c).trim();
+  return null;
+}
+
 function requireAuth(req, res, next) {
-  const token = req.cookies?.[AUTH_COOKIE];
+  const token = getTokenFromRequest(req);
   if (!token) return res.status(401).json({ error: 'authentication required' });
   try {
     const payload = jwt.verify(token, AUTH_SECRET);
@@ -98,7 +107,11 @@ app.post('/api/auth/login', (req, res) => {
     { expiresIn: '12h' }
   );
   res.cookie(AUTH_COOKIE, token, authCookieOptions());
-  res.json({ ok: true, user: { id: user.id, username: user.username, role: user.role } });
+  res.json({
+    ok: true,
+    token,
+    user: { id: user.id, username: user.username, role: user.role },
+  });
 });
 
 // --- Admin recovery (token-protected) ---
@@ -152,7 +165,7 @@ app.post('/api/auth/logout', (_req, res) => {
 });
 
 app.get('/api/auth/session', (req, res) => {
-  const token = req.cookies?.[AUTH_COOKIE];
+  const token = getTokenFromRequest(req);
   if (!token) return res.status(401).json({ error: 'not authenticated' });
   try {
     const payload = jwt.verify(token, AUTH_SECRET);

@@ -129,21 +129,114 @@ const TABLES = [
   },
 ];
 
+const AUTH_TOKEN_KEY = 'asset_register_jwt';
+
+function getAuthToken() {
+  try {
+    return sessionStorage.getItem(AUTH_TOKEN_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+function setAuthToken(token) {
+  try {
+    if (token) sessionStorage.setItem(AUTH_TOKEN_KEY, token);
+    else sessionStorage.removeItem(AUTH_TOKEN_KEY);
+  } catch {
+    /* ignore private mode / blocked storage */
+  }
+}
+
+function clearAuthToken() {
+  setAuthToken('');
+}
+
+function buildFetchInit(opts = {}) {
+  const rawHeaders = opts.headers;
+  const { headers: _omit, ...rest } = opts;
+  const init = { credentials: 'same-origin', ...rest };
+  const headers = new Headers(rawHeaders || undefined);
+  const token = getAuthToken();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  init.headers = headers;
+  return init;
+}
+
+function filenameFromContentDisposition(cd, fallback) {
+  if (!cd) return fallback;
+  const star = cd.match(/filename\*=UTF-8''([^;\s]+)/i);
+  if (star) {
+    try {
+      return decodeURIComponent(star[1]);
+    } catch {
+      return star[1];
+    }
+  }
+  const quoted = cd.match(/filename="([^"]+)"/i);
+  if (quoted) return quoted[1];
+  const plain = cd.match(/filename=([^;\s]+)/i);
+  if (plain) return plain[1].replace(/['"]/g, '');
+  return fallback;
+}
+
+async function downloadAuthenticatedFile(url, fallbackName) {
+  const res = await fetch(url, buildFetchInit());
+  if (!res.ok) {
+    const text = await res.text();
+    let msg = res.statusText;
+    try {
+      msg = JSON.parse(text).error || msg;
+    } catch {
+      /* ignore */
+    }
+    throw new Error(msg);
+  }
+  const name = filenameFromContentDisposition(res.headers.get('Content-Disposition'), fallbackName);
+  const blob = await res.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = objectUrl;
+  a.download = name;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+}
+
+async function openAuthenticatedHtml(url) {
+  const res = await fetch(url, buildFetchInit());
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(text?.slice(0, 240) || res.statusText);
+  }
+  const html = await res.text();
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+  const objectUrl = URL.createObjectURL(blob);
+  window.open(objectUrl, '_blank');
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 120_000);
+}
+
 async function getSessionUser() {
-  const res = await fetch('/api/auth/session', { credentials: 'same-origin' });
+  const res = await fetch('/api/auth/session', buildFetchInit());
   const text = await res.text();
   let data = null;
   try {
     data = text ? JSON.parse(text) : null;
   } catch {
+    data = null;
+  }
+  if (!res.ok) {
+    if (res.status === 401) clearAuthToken();
     return null;
   }
-  if (!res.ok || !data?.user) return null;
+  if (!data?.user) return null;
   return data.user;
 }
 
 async function fetchJSON(url, opts) {
-  const res = await fetch(url, { credentials: 'same-origin', ...opts });
+  const res = await fetch(url, buildFetchInit(opts));
   const text = await res.text();
   let data = null;
   try {
@@ -153,11 +246,34 @@ async function fetchJSON(url, opts) {
   }
   if (!res.ok) {
     if (res.status === 401) {
+      clearAuthToken();
       showLogin();
-      throw new Error('Please login first');
+      throw new Error(data?.error || 'Please login first');
     }
     const msg = data?.error || res.statusText || 'Request failed';
     throw new Error(msg);
+  }
+  return data;
+}
+
+async function loginWithPassword(username, password) {
+  const res = await fetch(
+    '/api/auth/login',
+    buildFetchInit({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    })
+  );
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = null;
+  }
+  if (!res.ok) {
+    throw new Error(data?.error || res.statusText || 'Login failed');
   }
   return data;
 }
@@ -497,7 +613,7 @@ async function loadGatePasses() {
         `
         : `
           <button class="btn secondary gp-print" data-id="${g.id}">Print</button>
-          <a class="btn secondary" href="/api/laptop-gatepasses/${g.id}/pdf">Download Gate Pass PDF</a>
+          <button type="button" class="btn secondary gp-pdf" data-id="${g.id}">Download Gate Pass PDF</button>
           <button class="btn secondary gp-edit" data-id="${g.id}">Edit</button>
           <button class="btn danger gp-delete" data-id="${g.id}">Delete</button>
         `;
@@ -510,7 +626,15 @@ async function loadGatePasses() {
   tbody.querySelectorAll('.gp-print').forEach((btn) => {
     btn.addEventListener('click', (ev) => {
       const id = ev.target.getAttribute('data-id');
-      window.open(`/api/laptop-gatepasses/${id}/print`, '_blank');
+      openAuthenticatedHtml(`/api/laptop-gatepasses/${id}/print`).catch((e) => alert(e.message));
+    });
+  });
+  tbody.querySelectorAll('.gp-pdf').forEach((btn) => {
+    btn.addEventListener('click', (ev) => {
+      const id = ev.target.getAttribute('data-id');
+      downloadAuthenticatedFile(`/api/laptop-gatepasses/${id}/pdf`, `gatepass-${id}.pdf`).catch((e) =>
+        alert(e.message)
+      );
     });
   });
   tbody.querySelectorAll('.gp-edit').forEach((btn) => {
@@ -569,14 +693,8 @@ $('#login-form').addEventListener('submit', async (ev) => {
   ev.preventDefault();
   const fd = new FormData(ev.target);
   try {
-    const data = await fetchJSON('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        username: fd.get('username'),
-        password: fd.get('password'),
-      }),
-    });
+    const data = await loginWithPassword(String(fd.get('username') || '').trim(), String(fd.get('password') || ''));
+    if (data.token) setAuthToken(data.token);
     showApp(data.user);
     showHome();
     ev.target.reset();
@@ -587,8 +705,9 @@ $('#login-form').addEventListener('submit', async (ev) => {
 });
 
 $('#logout-btn').addEventListener('click', async () => {
+  clearAuthToken();
   try {
-    await fetchJSON('/api/auth/logout', { method: 'POST' });
+    await fetch('/api/auth/logout', buildFetchInit({ method: 'POST' }));
   } catch (_e) {
     /* ignore */
   }
@@ -619,7 +738,7 @@ async function onDeleteRow(ev) {
   const id = ev.target.getAttribute('data-id');
   if (!confirm(`Delete this ${currentTable.label} record?`)) return;
   try {
-    const res = await fetch(`/api/register/${currentTable.key}/${id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/register/${currentTable.key}/${id}`, buildFetchInit({ method: 'DELETE' }));
     if (!res.ok) {
       const text = await res.text();
       let msg = res.statusText;
@@ -689,7 +808,7 @@ async function onCreateLaptopGatepass(ev) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    window.open(`/api/laptop-gatepasses/${gp.id}/print`, '_blank');
+    openAuthenticatedHtml(`/api/laptop-gatepasses/${gp.id}/print`).catch((e) => alert(e.message));
     alert(`Gate pass created: ${gp.gatepass_no}`);
     $('#gatepass-form').reset();
     $('#gp-out-date').value = new Date().toISOString().slice(0, 10);
@@ -736,7 +855,7 @@ async function onDeleteGatepass(ev) {
   const id = ev.target.getAttribute('data-id');
   if (!confirm('Delete this gatepass?')) return;
   try {
-    const res = await fetch(`/api/laptop-gatepasses/${id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/laptop-gatepasses/${id}`, buildFetchInit({ method: 'DELETE' }));
     if (!res.ok) {
       const text = await res.text();
       let msg = res.statusText;
@@ -767,6 +886,14 @@ async function bootstrap() {
   });
   renderWorkspaceGrid('');
   showHome();
+  document.querySelectorAll('a.js-auth-download').forEach((a) => {
+    a.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      const href = a.getAttribute('href');
+      if (!href) return;
+      downloadAuthenticatedFile(href, 'export.xlsx').catch((e) => alert(e.message));
+    });
+  });
   $('#table-import-btn').addEventListener('click', async () => {
     if (currentTable.key === 'gatepasses') return;
     const file = $('#table-import-file').files?.[0];
