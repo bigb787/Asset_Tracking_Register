@@ -155,7 +155,7 @@ function clearAuthToken() {
 function buildFetchInit(opts = {}) {
   const rawHeaders = opts.headers;
   const { headers: _omit, ...rest } = opts;
-  const init = { credentials: 'same-origin', ...rest };
+  const init = { credentials: 'same-origin', cache: 'no-store', ...rest };
   const headers = new Headers(rawHeaders || undefined);
   const token = getAuthToken();
   if (token) headers.set('Authorization', `Bearer ${token}`);

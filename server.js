@@ -21,6 +21,13 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 app.use(express.json());
 app.use(cookieParser());
+// Dynamic JSON APIs must not be cached (304 + empty body breaks fetch().json() in some cases).
+app.use('/api', (_req, res, next) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 function ensureDefaultAuthUser() {
