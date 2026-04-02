@@ -325,6 +325,42 @@ function tableMetaForWorkspace(tableKey) {
   };
 }
 
+function wireWorkspaceGridNavigation() {
+  const grid = document.querySelector('#wsGrid');
+  if (!grid || grid.dataset.navWired === '1') return;
+  grid.dataset.navWired = '1';
+  grid.addEventListener('click', (ev) => {
+    const card = ev.target.closest('.ws-card');
+    if (!card) return;
+    const key = card.getAttribute('data-key');
+    if (!key) return;
+    openWorkspace(key).catch((e) => {
+      console.error(e);
+      alert(
+        e && typeof e === 'object' && 'message' in e && e.message
+          ? String(e.message)
+          : 'Could not open this workspace. Check that you are still signed in and try again.'
+      );
+    });
+  });
+  grid.addEventListener('keydown', (ev) => {
+    if (ev.key !== 'Enter' && ev.key !== ' ') return;
+    const card = ev.target.closest('.ws-card');
+    if (!card || !grid.contains(card)) return;
+    ev.preventDefault();
+    const key = card.getAttribute('data-key');
+    if (!key) return;
+    openWorkspace(key).catch((e) => {
+      console.error(e);
+      alert(
+        e && typeof e === 'object' && 'message' in e && e.message
+          ? String(e.message)
+          : 'Could not open this workspace.'
+      );
+    });
+  });
+}
+
 function renderWorkspaceGrid(query) {
   const q = String(query || '').trim().toLowerCase();
   const items = [
@@ -333,10 +369,13 @@ function renderWorkspaceGrid(query) {
   ].filter((w) => !q || w.name.toLowerCase().includes(q) || w.loc.toLowerCase().includes(q));
 
   const grid = $('#wsGrid');
+  if (!grid) return;
+  wireWorkspaceGridNavigation();
   grid.innerHTML = items
     .map(
       (w) => `
-      <div class="ws-card" data-key="${escapeHtml(w.key)}">
+      <div class="ws-card" role="button" tabindex="0" data-key="${escapeHtml(w.key)}"
+        aria-label="Open ${escapeHtml(w.name)} workspace">
         <div class="ws-card-top">
           <div class="ws-icon" style="background:${escapeHtml(w.iconBg)};">
             <svg viewBox="0 0 20 20" fill="${escapeHtml(w.iconColor)}">
@@ -355,13 +394,6 @@ function renderWorkspaceGrid(query) {
       </div>`
     )
     .join('');
-
-  grid.querySelectorAll('.ws-card').forEach((card) => {
-    card.addEventListener('click', () => {
-      const key = card.getAttribute('data-key');
-      openWorkspace(key).catch((e) => console.error(e));
-    });
-  });
 }
 
 async function openWorkspace(tableKey) {

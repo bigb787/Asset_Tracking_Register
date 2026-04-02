@@ -65,7 +65,8 @@ input:focus,select:focus,textarea:focus{border-color:#185FA5;box-shadow:0 0 0 3p
 .screen{background:transparent;padding:0;}
 .home-topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:12px;}
 .home-title{font-size:20px;font-weight:600;}
-.home-sub{font-size:13px;color:var(--color-text-secondary);margin-bottom:18px;}
+.home-sub{font-size:13px;color:var(--color-text-secondary);margin-bottom:10px;}
+.home-hint{font-size:12px;color:var(--color-text-tertiary);margin-bottom:16px;line-height:1.45;max-width:720px;}
 .home-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
 .search-home{display:flex;align-items:center;gap:8px;background:var(--color-background-primary);border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:0 12px;width:260px;}
 .search-home input{border:none;background:transparent;font-size:13px;padding:10px 0;outline:none;width:100%;color:var(--color-text-primary);}
@@ -74,8 +75,10 @@ input:focus,select:focus,textarea:focus{border-color:#185FA5;box-shadow:0 0 0 3p
 @media (max-width: 980px){.grid{grid-template-columns:repeat(2,minmax(0,1fr));}}
 @media (max-width: 640px){.grid{grid-template-columns:1fr;}}
 
-.ws-card{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:18px;cursor:pointer;transition:border-color 0.15s;}
+.ws-card{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:18px;cursor:pointer;transition:border-color 0.15s;-webkit-tap-highlight-color:rgba(24,95,165,0.15);}
 .ws-card:hover{border-color:#185FA5;}
+.ws-card:focus{outline:2px solid #185FA5;outline-offset:2px;}
+.ws-card:focus:not(:focus-visible){outline:none;}
 .ws-card-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;}
 .ws-icon{width:40px;height:40px;border-radius:var(--border-radius-md);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 .ws-name{font-size:14px;font-weight:600;margin-bottom:3px;}
