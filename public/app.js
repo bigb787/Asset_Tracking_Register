@@ -130,12 +130,27 @@ const TABLES = [
 ];
 
 /** When the UI is served under a path prefix (e.g. https://host/asset-register/), set
- * <meta name="asset-register-base" content="/asset-register" /> in index.html. Leave empty at site root. */
-const APP_BASE = (
+ * <meta name="asset-register-base" content="/asset-register" /> in index.html (overrides auto-detect).
+ * If meta is empty, base is inferred from location so /api and static links work behind a reverse proxy path. */
+function inferAssetRegisterBasePath() {
+  try {
+    let path = window.location.pathname || '/';
+    if (path.endsWith('/')) path = path.slice(0, -1);
+    const lower = path.toLowerCase();
+    if (lower.endsWith('/index.html')) path = path.slice(0, -'/index.html'.length);
+    if (!path || path === '/') return '';
+    return path;
+  } catch {
+    return '';
+  }
+}
+
+const META_BASE = (
   document.querySelector('meta[name="asset-register-base"]')?.getAttribute('content') || ''
 )
   .trim()
   .replace(/\/$/, '');
+const APP_BASE = META_BASE || inferAssetRegisterBasePath();
 function apiUrl(path) {
   const p = path.startsWith('/') ? path : `/${path}`;
   return `${APP_BASE}${p}`;
@@ -617,6 +632,7 @@ function renderGatepassInput(key, value) {
 let tableSelectChangeWired = false;
 function renderTableSelector() {
   const select = $('#table-select');
+  if (!select) return;
   select.innerHTML = TABLES.map((t) => `<option value="${t.key}">${escapeHtml(t.label)}</option>`).join('');
   select.value = currentTable.key;
   if (tableSelectChangeWired) return;
@@ -1187,13 +1203,14 @@ async function onDeleteGatepass(ev) {
 }
 
 async function bootstrap() {
+  try {
   renderTableSelector();
-  $('#ws-back-btn').addEventListener('click', () => {
+  $('#ws-back-btn')?.addEventListener('click', () => {
     showHome();
     renderWorkspaceGrid(String(document.querySelector('#wsSearch')?.value || ''));
     hydrateWorkspaceSummaries().catch((e) => console.error(e));
   });
-  $('#wsSearch').addEventListener('input', () => {
+  $('#wsSearch')?.addEventListener('input', () => {
     scheduleWorkspaceGridRefresh();
   });
   renderWorkspaceGrid('');
@@ -1214,7 +1231,7 @@ async function bootstrap() {
       downloadAuthenticatedFile(href, 'export.xlsx').catch((e) => alert(e.message));
     });
   });
-  $('#table-import-btn').addEventListener('click', async () => {
+  $('#table-import-btn')?.addEventListener('click', async () => {
     if (currentTable.key === 'gatepasses') return;
     const file = $('#table-import-file').files?.[0];
     if (!file) {
@@ -1230,7 +1247,7 @@ async function bootstrap() {
       alert(err.message);
     }
   });
-  $('#gp-import-btn').addEventListener('click', async () => {
+  $('#gp-import-btn')?.addEventListener('click', async () => {
     const file = $('#gp-import-file').files?.[0];
     if (!file) {
       alert('Choose an Excel file first.');
@@ -1245,35 +1262,35 @@ async function bootstrap() {
       alert(err.message);
     }
   });
-  $('#table-search-btn').addEventListener('click', () => {
+  $('#table-search-btn')?.addEventListener('click', () => {
     currentTableSearch = ($('#table-search-input').value || '').trim();
     refresh().catch((e) => console.error(e));
   });
-  $('#table-search-clear-btn').addEventListener('click', () => {
+  $('#table-search-clear-btn')?.addEventListener('click', () => {
     currentTableSearch = '';
     $('#table-search-input').value = '';
     refresh().catch((e) => console.error(e));
   });
-  $('#table-search-input').addEventListener('keydown', (ev) => {
+  $('#table-search-input')?.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Enter') return;
     ev.preventDefault();
     currentTableSearch = (ev.target.value || '').trim();
     refresh().catch((e) => console.error(e));
   });
-  $('#laptop-status-filter').addEventListener('change', (ev) => {
+  $('#laptop-status-filter')?.addEventListener('change', (ev) => {
     laptopStatusFilter = String(ev.target.value || 'all');
     refresh().catch((e) => console.error(e));
   });
-  $('#gp-search-btn').addEventListener('click', () => {
+  $('#gp-search-btn')?.addEventListener('click', () => {
     currentGatepassSearch = ($('#gp-search-input').value || '').trim();
     loadGatePasses().catch((e) => console.error(e));
   });
-  $('#gp-search-clear-search-btn').addEventListener('click', () => {
+  $('#gp-search-clear-search-btn')?.addEventListener('click', () => {
     currentGatepassSearch = '';
     $('#gp-search-input').value = '';
     loadGatePasses().catch((e) => console.error(e));
   });
-  $('#gp-search-input').addEventListener('keydown', (ev) => {
+  $('#gp-search-input')?.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Enter') return;
     ev.preventDefault();
     currentGatepassSearch = (ev.target.value || '').trim();
@@ -1281,13 +1298,13 @@ async function bootstrap() {
   });
   updateSectionSwitcher();
   renderDynamicForm();
-  $('#gp-refresh-btn').addEventListener('click', () => {
+  $('#gp-refresh-btn')?.addEventListener('click', () => {
     loadGatePasses().catch((e) => console.error(e));
   });
-  $('#gp-status-filter').addEventListener('change', () => {
+  $('#gp-status-filter')?.addEventListener('change', () => {
     loadGatePasses().catch((e) => console.error(e));
   });
-  $('#gp-clear-btn').addEventListener('click', () => {
+  $('#gp-clear-btn')?.addEventListener('click', () => {
     $('#gp-status-filter').value = 'all';
     $('#gp-laptop-filter').value = '';
     $('#gp-out-date-from').value = '';
@@ -1295,23 +1312,25 @@ async function bootstrap() {
     $('#gp-export-link').href = apiUrl('/api/export/gatepasses.xlsx');
     loadGatePasses().catch((e) => console.error(e));
   });
-  $('#gp-laptop-filter').addEventListener('change', () => {
+  $('#gp-laptop-filter')?.addEventListener('change', () => {
     loadGatePasses().catch((e) => console.error(e));
   });
-  $('#gp-out-date-from').addEventListener('change', () => {
+  $('#gp-out-date-from')?.addEventListener('change', () => {
     loadGatePasses().catch((e) => console.error(e));
   });
-  $('#gp-out-date-to').addEventListener('change', () => {
+  $('#gp-out-date-to')?.addEventListener('change', () => {
     loadGatePasses().catch((e) => console.error(e));
   });
-  $('#gatepass-form').addEventListener('submit', (ev) => {
+  $('#gatepass-form')?.addEventListener('submit', (ev) => {
     onCreateLaptopGatepass(ev).catch((e) => console.error(e));
   });
-  $('#gp-service-tag').addEventListener('change', (ev) => {
+  $('#gp-service-tag')?.addEventListener('change', (ev) => {
     fillGatepassFromServiceTag(ev.target.value);
   });
-  $('#gp-out-date').value = new Date().toISOString().slice(0, 10);
-  $('#gp-type').value = 'temporary';
+  const gpOut = $('#gp-out-date');
+  const gpTy = $('#gp-type');
+  if (gpOut) gpOut.value = new Date().toISOString().slice(0, 10);
+  if (gpTy) gpTy.value = 'temporary';
 
   $('#reg-add-asset-btn')?.addEventListener('click', () => {
     const p = $('#add-asset-panel');
@@ -1348,6 +1367,24 @@ async function bootstrap() {
     }
   } else {
     showLogin();
+  }
+  } catch (bootErr) {
+    console.error('[bootstrap]', bootErr);
+    const banner = document.getElementById('boot-error');
+    if (banner) {
+      const msg =
+        bootErr && typeof bootErr === 'object' && 'message' in bootErr
+          ? String(bootErr.message)
+          : String(bootErr);
+      banner.textContent = `Application failed to start (${msg}). Check the browser console. If the app is under a sub-path, set meta asset-register-base or env ASSET_REGISTER_STATIC_PREFIX on the server.`;
+      banner.classList.remove('hidden');
+    }
+    try {
+      document.getElementById('login-view')?.classList.remove('hidden');
+      document.getElementById('app-view')?.classList.add('hidden');
+    } catch (_e) {
+      /* ignore */
+    }
   }
 }
 

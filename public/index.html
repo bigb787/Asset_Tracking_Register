@@ -6,11 +6,12 @@
   <!-- If the app is served under a sub-path, set content to that prefix, e.g. /asset-register (no trailing slash). At http://3.83.4.230/ leave empty. -->
   <meta name="asset-register-base" content="" />
   <title>Asset Register</title>
-  <link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any" />
-  <link rel="alternate icon" href="/favicon.ico" />
-  <link rel="stylesheet" href="/styles.css" />
+  <link rel="icon" href="favicon.svg" type="image/svg+xml" sizes="any" />
+  <link rel="alternate icon" href="favicon.ico" />
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+  <p id="boot-error" class="login-error hidden" role="alert" style="margin:16px;max-width:720px;margin-left:auto;margin-right:auto;"></p>
   <main id="login-view" class="auth-page">
     <section class="auth-card">
       <div class="auth-title">Asset register</div>
@@ -213,6 +214,6 @@
     </section>
   </main>
 
-  <script src="/app.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

@@ -38,23 +38,33 @@ app.use('/api', (_req, res, next) => {
   next();
 });
 const publicDir = path.join(__dirname, 'public');
+const STATIC_PREFIX = String(process.env.ASSET_REGISTER_STATIC_PREFIX || '')
+  .trim()
+  .replace(/\/$/, '');
+const staticWithCacheHeaders = {
+  setHeaders(res, filePath) {
+    const ext = path.extname(filePath).toLowerCase();
+    if (ext === '.html' || ext === '.js' || ext === '.css') {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
+  },
+};
 // Browsers request /favicon.ico by default; serve SVG so the tab icon works without a binary .ico file.
 app.get('/favicon.ico', (_req, res) => {
   res.type('image/svg+xml');
   res.sendFile(path.join(publicDir, 'favicon.svg'));
 });
-app.use(
-  express.static(publicDir, {
-    setHeaders(res, filePath) {
-      const ext = path.extname(filePath).toLowerCase();
-      if (ext === '.html' || ext === '.js' || ext === '.css') {
-        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-        res.setHeader('Pragma', 'no-cache');
-        res.setHeader('Expires', '0');
-      }
-    },
-  })
-);
+if (STATIC_PREFIX) {
+  app.use(STATIC_PREFIX, express.static(publicDir, staticWithCacheHeaders));
+  app.get(`${STATIC_PREFIX}/favicon.ico`, (_req, res) => {
+    res.type('image/svg+xml');
+    res.sendFile(path.join(publicDir, 'favicon.svg'));
+  });
+  console.log(`[static] Also serving files under "${STATIC_PREFIX}" (ASSET_REGISTER_STATIC_PREFIX)`);
+}
+app.use(express.static(publicDir, staticWithCacheHeaders));
 
 function ensureDefaultAuthUser() {
   const existing = db.prepare('SELECT id FROM auth_users LIMIT 1').get();
