@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "start:noauth": "node server.js --skip-auth"
   },
   "engines": {
     "node": ">=18"

@@ -19,6 +19,15 @@ const DEFAULT_ADMIN_PASSWORD = process.env.DEFAULT_ADMIN_PASSWORD || 'ChangeMe12
 const ADMIN_RESET_TOKEN = process.env.ADMIN_RESET_TOKEN || '';
 const upload = multer({ storage: multer.memoryStorage() });
 
+/** Temporary: disable API auth for UI testing. Set env ASSET_REGISTER_SKIP_AUTH=1 or start with node server.js --skip-auth. Remove for production. */
+const SKIP_AUTH =
+  process.argv.includes('--skip-auth') ||
+  ['1', 'true', 'yes'].includes(String(process.env.ASSET_REGISTER_SKIP_AUTH || '').toLowerCase());
+
+function bypassAuthPayload() {
+  return { sub: 0, username: 'dev', role: 'admin' };
+}
+
 app.use(express.json());
 app.use(cookieParser());
 // Dynamic JSON APIs must not be cached (304 + empty body breaks fetch().json() in some cases).
@@ -88,6 +97,10 @@ function getTokenFromRequest(req) {
 }
 
 function requireAuth(req, res, next) {
+  if (SKIP_AUTH) {
+    req.authUser = bypassAuthPayload();
+    return next();
+  }
   const token = getTokenFromRequest(req);
   if (!token) return res.status(401).json({ error: 'authentication required' });
   try {
@@ -114,6 +127,15 @@ function requireAdminResetToken(req, res, next) {
 }
 
 app.post('/api/auth/login', (req, res) => {
+  if (SKIP_AUTH) {
+    const u = bypassAuthPayload();
+    return res.json({
+      ok: true,
+      authDisabled: true,
+      token: 'dev-bypass',
+      user: { id: u.sub, username: u.username, role: u.role },
+    });
+  }
   const username = String(req.body?.username || '').trim();
   const password = String(req.body?.password || '');
   if (!username || !password) {
@@ -184,11 +206,21 @@ app.post('/api/admin/reset-db', requireAdminResetToken, (req, res) => {
 });
 
 app.post('/api/auth/logout', (_req, res) => {
-  res.clearCookie(AUTH_COOKIE, authCookieOptions());
+  if (!SKIP_AUTH) {
+    res.clearCookie(AUTH_COOKIE, authCookieOptions());
+  }
   res.json({ ok: true });
 });
 
 app.get('/api/auth/session', (req, res) => {
+  if (SKIP_AUTH) {
+    const u = bypassAuthPayload();
+    return res.json({
+      authenticated: true,
+      authDisabled: true,
+      user: { id: u.sub, username: u.username, role: u.role },
+    });
+  }
   const token = getTokenFromRequest(req);
   if (!token) return res.status(401).json({ error: 'not authenticated' });
   try {
@@ -1709,5 +1741,10 @@ app.use((err, _req, res, _next) => {
 
 app.listen(PORT, () => {
   ensureDefaultAuthUser();
+  if (SKIP_AUTH) {
+    console.warn(
+      '[auth] API authentication is DISABLED (ASSET_REGISTER_SKIP_AUTH or --skip-auth). Unset env and redeploy for production.'
+    );
+  }
   console.log(`Asset register listening at http://localhost:${PORT}`);
 });

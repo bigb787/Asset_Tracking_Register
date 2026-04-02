@@ -259,7 +259,7 @@ async function fetchJSON(url, opts) {
   if (!res.ok) {
     if (res.status === 401) {
       clearAuthToken();
-      showLogin();
+      if (!serverAuthDisabled) showLogin();
       throw new Error(data?.error || 'Please login first');
     }
     const msg = data?.error || res.statusText || 'Request failed';
@@ -295,10 +295,13 @@ async function loginWithPassword(username, password) {
         : 'Login succeeded but the server response was missing user data. Redeploy the latest API, or clear cache and retry.'
     );
   }
+  if (data.authDisabled) serverAuthDisabled = true;
   return data;
 }
 
 let activeUser = null;
+/** Set when server returns authDisabled (temporary open API). */
+let serverAuthDisabled = false;
 let currentTable = TABLES[0];
 let editingRowId = null;
 let currentRows = [];
@@ -437,6 +440,11 @@ function setLoginError(message) {
 }
 
 function showLogin() {
+  if (serverAuthDisabled) {
+    showApp(activeUser || { id: 0, username: 'dev', role: 'admin' });
+    showHome();
+    return;
+  }
   $('#login-view').classList.remove('hidden');
   $('#app-view').classList.add('hidden');
   $('#auth-user').textContent = '';
@@ -448,7 +456,9 @@ function showApp(user) {
   $('#login-view').classList.add('hidden');
   $('#app-view').classList.remove('hidden');
   const name = user && typeof user.username === 'string' ? user.username : 'user';
-  $('#auth-user').textContent = `Logged in as ${name}`;
+  $('#auth-user').textContent = serverAuthDisabled
+    ? `Open access (auth off) · ${name}`
+    : `Logged in as ${name}`;
 }
 
 function escapeHtml(s) {
@@ -788,9 +798,12 @@ async function performLogin() {
   try {
     const data = await loginWithPassword(username, password);
     if (data.token) setAuthToken(data.token);
+    if (data.authDisabled) serverAuthDisabled = true;
     showApp(data.user);
     showHome();
     renderWorkspaceGrid(String(document.querySelector('#wsSearch')?.value || ''));
+    if (serverAuthDisabled) $('#logout-btn')?.classList.add('hidden');
+    else $('#logout-btn')?.classList.remove('hidden');
     const form = document.querySelector('#login-form');
     if (form) form.reset();
     try {
@@ -831,6 +844,7 @@ document.querySelector('#login-submit-btn')?.addEventListener('click', () => {
 });
 
 $('#logout-btn').addEventListener('click', async () => {
+  if (serverAuthDisabled) return;
   clearAuthToken();
   try {
     await fetch(apiUrl('/api/auth/logout'), buildFetchInit({ method: 'POST' }));
@@ -1133,6 +1147,11 @@ async function bootstrap() {
     showApp(user);
     showHome();
     renderWorkspaceGrid(String(document.querySelector('#wsSearch')?.value || ''));
+    if (serverAuthDisabled) {
+      $('#logout-btn')?.classList.add('hidden');
+    } else {
+      $('#logout-btn')?.classList.remove('hidden');
+    }
     try {
       await refresh();
     } catch (_e) {
