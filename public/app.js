@@ -246,7 +246,6 @@ async function openWorkspace(tableKey) {
 function showLogin() {
   $('#login-view').classList.remove('hidden');
   $('#app-view').classList.add('hidden');
-  $('#auth-bar').classList.add('hidden');
   $('#auth-user').textContent = '';
 }
 
@@ -254,7 +253,6 @@ function showApp(user) {
   activeUser = user;
   $('#login-view').classList.add('hidden');
   $('#app-view').classList.remove('hidden');
-  $('#auth-bar').classList.remove('hidden');
   $('#auth-user').textContent = `Logged in as ${user.username}`;
 }
 
