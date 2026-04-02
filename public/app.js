@@ -699,6 +699,9 @@ function renderGatepassBadges(rows) {
 async function loadAudit() {
   const auditTable = currentTable.key === 'gatepasses' ? 'laptop_gatepasses' : currentTable.key;
   const entries = await fetchJSON(`/api/audit?limit=20&table=${encodeURIComponent(auditTable)}`);
+  if (!Array.isArray(entries)) {
+    throw new Error('Server returned invalid data for audit (expected a list).');
+  }
   $('#audit-list').innerHTML = entries.length
     ? entries
         .map(
@@ -743,6 +746,7 @@ async function performLogin() {
     if (data.token) setAuthToken(data.token);
     showApp(data.user);
     showHome();
+    renderWorkspaceGrid(String(document.querySelector('#wsSearch')?.value || ''));
     const form = document.querySelector('#login-form');
     if (form) form.reset();
     try {
@@ -953,8 +957,6 @@ async function onDeleteGatepass(ev) {
 }
 
 async function bootstrap() {
-  const user = await getSessionUser();
-
   renderTableSelector();
   $('#ws-back-btn').addEventListener('click', () => {
     showHome();
@@ -1071,6 +1073,10 @@ async function bootstrap() {
   $('#gp-out-date').value = new Date().toISOString().slice(0, 10);
   $('#gp-type').value = 'temporary';
 
+  let user = await getSessionUser();
+  if (!user && getAuthToken()) {
+    user = await getSessionUser();
+  }
   if (user) {
     showApp(user);
     try {
