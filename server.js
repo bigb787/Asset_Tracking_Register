@@ -28,7 +28,19 @@ app.use('/api', (_req, res, next) => {
   res.setHeader('Expires', '0');
   next();
 });
-app.use(express.static(path.join(__dirname, 'public')));
+const publicDir = path.join(__dirname, 'public');
+app.use(
+  express.static(publicDir, {
+    setHeaders(res, filePath) {
+      const ext = path.extname(filePath).toLowerCase();
+      if (ext === '.html' || ext === '.js' || ext === '.css') {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+      }
+    },
+  })
+);
 
 function ensureDefaultAuthUser() {
   const existing = db.prepare('SELECT id FROM auth_users LIMIT 1').get();
