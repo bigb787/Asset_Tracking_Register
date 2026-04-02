@@ -7,179 +7,176 @@
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-  <header class="header">
-    <h1>Asset register</h1>
-    <p class="sub">Inventory aligned with ISO/IEC 27001 asset management — owners, assignments, audit trail, Excel export.</p>
-    <div id="auth-bar" class="auth-bar hidden">
-      <span id="auth-user"></span>
-      <button id="logout-btn" type="button" class="btn secondary">Logout</button>
-      <a class="btn secondary" href="/api/export/assets.xlsx">Export all tables to Excel</a>
-    </div>
-  </header>
-
-  <main id="login-view" class="layout">
-    <section class="card auth-card">
-      <h2>Login</h2>
-      <form id="login-form" class="form-grid">
+  <main id="login-view" class="auth-page">
+    <section class="auth-card">
+      <div class="auth-title">Asset register</div>
+      <div class="auth-sub">Sign in to manage asset tables and laptop gate passes.</div>
+      <form id="login-form" class="auth-form">
         <label>Username<input name="username" required /></label>
         <label>Password<input name="password" type="password" required /></label>
-        <button type="submit" class="btn">Sign in</button>
+        <button type="submit" class="primary-btn">Sign in</button>
       </form>
-      <p class="hint">Default credentials: <code>admin</code> / <code>ChangeMe123!</code>. Change this immediately in production.</p>
+      <div class="auth-hint">Default credentials: <code>admin</code> / <code>ChangeMe123!</code></div>
     </section>
   </main>
 
-  <main id="app-view" class="layout hidden">
-    <section class="card full-width">
-      <h2>Asset Registers</h2>
-      <div class="section-switcher">
-        <button id="show-assets-btn" type="button" class="btn secondary">Asset Tables</button>
-        <button id="show-gatepasses-btn" type="button" class="btn secondary">Gate Passes</button>
+  <main id="app-view" class="app hidden">
+    <header class="topbar">
+      <div>
+        <div class="page-title">Asset register</div>
+        <div class="page-sub" id="auth-user"></div>
       </div>
-      <div class="import-bar">
-        <input id="table-import-file" type="file" accept=".xlsx" />
-        <button id="table-import-btn" type="button" class="btn secondary">Import Excel to Current Table</button>
+      <div class="topbar-actions">
+        <a class="ghost-btn" href="/api/export/assets.xlsx">Export all tables</a>
+        <button id="logout-btn" type="button" class="ghost-btn">Logout</button>
       </div>
-      <div class="import-bar">
-        <input id="table-search-input" type="search" placeholder="Search current table" />
-        <button id="table-search-btn" type="button" class="btn secondary">Search</button>
-        <button id="table-search-clear-btn" type="button" class="btn secondary">Clear Search</button>
-      </div>
-      <label>Choose Table
-        <select id="table-select"></select>
-      </label>
-      <form id="dynamic-form" class="form-grid"></form>
-    </section>
+    </header>
 
-    <section class="card full-width">
-      <h2 id="table-title">Records</h2>
-      <p class="hint">Headers are set per table as requested. "Free (?)" is captured as <code>free_note</code>. In every table, row actions appear in the first column after you save a record.</p>
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead id="data-head"></thead>
-          <tbody id="data-rows"></tbody>
-        </table>
-      </div>
-    </section>
-
-    <section id="gatepass-panel" class="card full-width hidden">
-      <h2>Laptop Gate Pass</h2>
-      <div class="section-switcher">
-        <button id="gp-back-btn" type="button" class="btn secondary">Back to Asset Tables</button>
-      </div>
-      <div class="import-bar">
-        <input id="gp-import-file" type="file" accept=".xlsx" />
-        <button id="gp-import-btn" type="button" class="btn secondary">Import Gate Pass Excel</button>
-      </div>
-      <div class="import-bar">
-        <input id="gp-search-input" type="search" placeholder="Search gate passes" />
-        <button id="gp-search-btn" type="button" class="btn secondary">Search</button>
-        <button id="gp-search-clear-search-btn" type="button" class="btn secondary">Clear Search</button>
-      </div>
-      <form id="gatepass-form" class="form-grid">
-        <label>Service Tag
-          <input id="gp-service-tag" name="service_tag" required />
-        </label>
-        <label>User Name
-          <input id="gp-issued-to" name="issued_to" required />
-        </label>
-        <label>Purpose
-          <input id="gp-purpose" name="purpose" value="Official work" required />
-        </label>
-        <label>Out Date
-          <input id="gp-out-date" name="out_date" type="date" required />
-        </label>
-        <label>Expected Return Date
-          <input id="gp-expected-return" name="expected_return_date" type="date" />
-        </label>
-        <label>Approved By
-          <input id="gp-approved-by" name="approved_by" />
-        </label>
-        <label>Gate Pass Type
-          <select id="gp-type" name="gatepass_type">
-            <option value="temporary">Temporary</option>
-            <option value="permanent">Permanent</option>
-          </select>
-        </label>
-        <label>Keyboard
-          <input id="gp-keyboard" name="keyboard" />
-        </label>
-        <label>Mouse
-          <input id="gp-mouse" name="mouse" />
-        </label>
-        <label>HeadPhone
-          <input id="gp-headphone" name="headphone" />
-        </label>
-        <label>USB Extender
-          <input id="gp-usb-extender" name="usb_extender" />
-        </label>
-        <label>Authority Signatory
-          <input id="gp-authority-signatory" name="authority_signatory" />
-        </label>
-        <label>Security Signatory
-          <input id="gp-security-signatory" name="security_signatory" />
-        </label>
-        <label>User Signatory
-          <input id="gp-user-signatory" name="user_signatory" />
-        </label>
-        <label class="full">Remarks
-          <input id="gp-remarks" name="remarks" />
-        </label>
-        <div class="form-actions-bar">
-          <button type="submit" class="btn">Create Gate Pass</button>
-          <button id="gp-form-clear-btn" type="reset" class="btn secondary">Clear Gate Pass Form</button>
+    <!-- Screen 1: Workspace selector -->
+    <section id="homeScreen" class="screen">
+      <div class="home-topbar">
+        <div class="home-title">Asset workspaces</div>
+        <div class="home-actions">
+          <div class="search-home">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.4;flex-shrink:0;"><circle cx="7" cy="7" r="4"/><path d="M11 11l2.5 2.5"/></svg>
+            <input id="wsSearch" placeholder="Search workspaces…" />
+          </div>
         </div>
-      </form>
-      <h3>All Created Gate Passes</h3>
-      <div class="form-grid">
-        <label>Status
-          <select id="gp-status-filter">
-            <option value="all">all</option>
+      </div>
+      <div class="home-sub">Select a workspace to view and manage its asset register.</div>
+      <div class="grid" id="wsGrid"></div>
+    </section>
+
+    <!-- Screen 2: Asset register table view -->
+    <section id="regScreen" class="screen reg-screen hidden">
+      <div class="reg-topbar">
+        <button id="ws-back-btn" class="back-btn" type="button">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 3L5 8l5 5"/></svg>
+          All workspaces
+        </button>
+        <div class="breadcrumb">Workspaces › <span id="breadName">—</span></div>
+      </div>
+
+      <div class="reg-header">
+        <div class="reg-title-row">
+          <div class="reg-icon" id="regIcon"></div>
+          <div>
+            <div class="reg-title" id="regTitle">—</div>
+            <div class="reg-sub" id="regSub">—</div>
+          </div>
+        </div>
+        <div class="reg-actions">
+          <input id="table-import-file" type="file" accept=".xlsx" class="file" />
+          <button id="table-import-btn" type="button" class="ghost-btn">Import Excel</button>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <div class="search-box">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.4;flex-shrink:0;"><circle cx="7" cy="7" r="4"/><path d="M11 11l2.5 2.5"/></svg>
+          <input id="table-search-input" placeholder="Search…" />
+        </div>
+        <select id="table-select" class="dd-select"></select>
+        <select id="laptop-status-filter" class="dd-select hidden">
+          <option value="all">All status</option>
+          <option value="available">available</option>
+          <option value="allocated">allocated</option>
+          <option value="to be scrapped">to be scrapped</option>
+          <option value="Under repairing">Under repairing</option>
+        </select>
+        <button id="table-search-btn" type="button" class="ghost-btn">Search</button>
+        <button id="table-search-clear-btn" type="button" class="ghost-btn">Clear</button>
+      </div>
+
+      <div class="table-wrap">
+        <div id="asset-table-wrap">
+          <table class="tbl">
+            <thead id="data-head"></thead>
+            <tbody id="data-rows"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Gate Passes keeps same IDs/headers, just styled -->
+      <section id="gatepass-panel" class="gatepass hidden">
+        <div class="gatepass-top">
+          <div class="reg-title">Gate Passes</div>
+          <div class="reg-actions">
+            <input id="gp-import-file" type="file" accept=".xlsx" class="file" />
+            <button id="gp-import-btn" type="button" class="ghost-btn">Import Gate Pass Excel</button>
+            <a id="gp-export-link" class="ghost-btn" href="/api/export/gatepasses.xlsx">Export Gate Passes</a>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <div class="search-box">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.4;flex-shrink:0;"><circle cx="7" cy="7" r="4"/><path d="M11 11l2.5 2.5"/></svg>
+            <input id="gp-search-input" placeholder="Search gate passes…" />
+          </div>
+          <button id="gp-search-btn" type="button" class="ghost-btn">Search</button>
+          <button id="gp-search-clear-search-btn" type="button" class="ghost-btn">Clear</button>
+          <select id="gp-status-filter" class="dd-select">
+            <option value="all">All status</option>
             <option value="draft">draft</option>
             <option value="approved">approved</option>
             <option value="returned">returned</option>
             <option value="cancelled">cancelled</option>
           </select>
-        </label>
-        <label>Laptop ID (optional)
-          <input id="gp-laptop-filter" />
-        </label>
-        <label>Out Date From
-          <input id="gp-out-date-from" type="date" />
-        </label>
-        <label>Out Date To
-          <input id="gp-out-date-to" type="date" />
-        </label>
-        <a id="gp-export-link" class="btn secondary" href="/api/export/gatepasses.xlsx">Export Gate Passes to Excel</a>
-        <button id="gp-refresh-btn" type="button" class="btn">Refresh Gate Passes</button>
-        <button id="gp-clear-btn" type="button" class="btn secondary">Clear Filters</button>
-      </div>
-      <div id="gp-badges" class="badge-row"></div>
-      <div class="table-wrap">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Gate Pass No</th>
-              <th>Laptop ID</th>
-              <th>Service Tag</th>
-              <th>Issued To</th>
-              <th>Out Date</th>
-              <th>Type</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="gp-rows"></tbody>
-        </table>
-      </div>
-    </section>
+          <input id="gp-laptop-filter" class="dd-select" placeholder="Laptop ID (optional)" />
+          <input id="gp-out-date-from" class="dd-select" type="date" />
+          <input id="gp-out-date-to" class="dd-select" type="date" />
+          <button id="gp-refresh-btn" type="button" class="primary-btn">Refresh</button>
+          <button id="gp-clear-btn" type="button" class="ghost-btn">Clear Filters</button>
+        </div>
 
-    <section class="card full-width">
-      <details id="history-panel">
+        <div id="gp-badges" class="badge-row"></div>
+
+        <div class="table-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>Gate Pass No</th>
+                <th>Laptop ID</th>
+                <th>Service Tag</th>
+                <th>Issued To</th>
+                <th>Out Date</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="gp-rows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <details id="history-panel" class="history">
         <summary id="history-title">Recent Record History</summary>
-        <p class="hint">Open this only when you want to review who added, updated, or deleted records.</p>
         <ul id="audit-list" class="audit"></ul>
       </details>
+
+      <!-- Keep dynamic form in DOM for existing behavior, but visually tucked away -->
+      <section class="hidden">
+        <form id="dynamic-form" class="form-grid"></form>
+        <form id="gatepass-form" class="form-grid"></form>
+        <button id="gp-back-btn" type="button"></button>
+        <input id="gp-service-tag" />
+        <input id="gp-issued-to" />
+        <input id="gp-purpose" />
+        <input id="gp-out-date" />
+        <input id="gp-expected-return" />
+        <input id="gp-approved-by" />
+        <select id="gp-type"></select>
+        <input id="gp-keyboard" />
+        <input id="gp-mouse" />
+        <input id="gp-headphone" />
+        <input id="gp-usb-extender" />
+        <input id="gp-authority-signatory" />
+        <input id="gp-security-signatory" />
+        <input id="gp-user-signatory" />
+        <input id="gp-remarks" />
+        <button id="gp-form-clear-btn" type="button"></button>
+      </section>
     </section>
   </main>
 

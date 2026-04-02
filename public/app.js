@@ -156,13 +156,91 @@ let currentRows = [];
 let editingGatepassId = null;
 let currentTableSearch = '';
 let currentGatepassSearch = '';
+let laptopStatusFilter = 'all';
 
-function getRegisterFormSection() {
-  return $('#dynamic-form').closest('section');
+function showHome() {
+  $('#homeScreen').classList.remove('hidden');
+  $('#regScreen').classList.add('hidden');
 }
 
-function getRegisterTableSection() {
-  return $('#table-title').closest('section');
+function showRegister() {
+  $('#homeScreen').classList.add('hidden');
+  $('#regScreen').classList.remove('hidden');
+}
+
+function tableMetaForWorkspace(tableKey) {
+  if (tableKey === 'gatepasses') {
+    return {
+      key: 'gatepasses',
+      name: 'Gate Passes',
+      loc: 'Laptop gate pass register',
+      iconBg: '#E6F1FB',
+      iconColor: '#185FA5',
+    };
+  }
+  const t = TABLES.find((x) => x.key === tableKey) || TABLES[0];
+  return {
+    key: t.key,
+    name: t.label,
+    loc: 'Asset register table',
+    iconBg: '#EAF3DE',
+    iconColor: '#3B6D11',
+  };
+}
+
+function renderWorkspaceGrid(query) {
+  const q = String(query || '').trim().toLowerCase();
+  const items = [
+    ...TABLES.filter((t) => t.key !== 'gatepasses').map((t) => tableMetaForWorkspace(t.key)),
+    tableMetaForWorkspace('gatepasses'),
+  ].filter((w) => !q || w.name.toLowerCase().includes(q) || w.loc.toLowerCase().includes(q));
+
+  const grid = $('#wsGrid');
+  grid.innerHTML = items
+    .map(
+      (w) => `
+      <div class="ws-card" data-key="${escapeHtml(w.key)}">
+        <div class="ws-card-top">
+          <div class="ws-icon" style="background:${escapeHtml(w.iconBg)};">
+            <svg viewBox="0 0 20 20" fill="${escapeHtml(w.iconColor)}">
+              <rect x="2" y="8" width="16" height="10" rx="1.5"></rect>
+              <path d="M1 8l9-6 9 6" fill="none" stroke="${escapeHtml(w.iconColor)}" stroke-width="1.5"></path>
+            </svg>
+          </div>
+          <div class="ws-arrow" style="opacity:1;color:#185FA5;font-size:18px;margin-top:2px;">→</div>
+        </div>
+        <div class="ws-name">${escapeHtml(w.name)}</div>
+        <div class="ws-loc">${escapeHtml(w.loc)}</div>
+        <div class="ws-footer">
+          <span class="ws-alert" style="background:#EAF3DE;color:#3B6D11;">Ready</span>
+          <div class="ws-updated">Updated just now</div>
+        </div>
+      </div>`
+    )
+    .join('');
+
+  grid.querySelectorAll('.ws-card').forEach((card) => {
+    card.addEventListener('click', () => {
+      const key = card.getAttribute('data-key');
+      openWorkspace(key).catch((e) => console.error(e));
+    });
+  });
+}
+
+async function openWorkspace(tableKey) {
+  const meta = tableMetaForWorkspace(tableKey);
+  $('#breadName').textContent = meta.name;
+  $('#regTitle').textContent = meta.name;
+  $('#regSub').textContent = meta.loc;
+  $('#regIcon').style.background = meta.iconBg;
+  $('#regIcon').innerHTML = `<svg width="18" height="18" viewBox="0 0 20 20" fill="${escapeHtml(
+    meta.iconColor
+  )}"><rect x="2" y="8" width="16" height="10" rx="1.5"/><path d="M1 8l9-6 9 6" fill="none" stroke="${escapeHtml(
+    meta.iconColor
+  )}" stroke-width="1.5"/></svg>`;
+
+  showRegister();
+  await setCurrentTable(tableKey);
 }
 
 function showLogin() {
@@ -254,8 +332,7 @@ function renderTableSelector() {
 }
 
 function updateSectionSwitcher() {
-  $('#show-assets-btn').classList.toggle('active', currentTable.key !== 'gatepasses');
-  $('#show-gatepasses-btn').classList.toggle('active', currentTable.key === 'gatepasses');
+  // no-op in new UI (workspace cards drive navigation)
 }
 
 async function setCurrentTable(tableKey) {
@@ -272,56 +349,31 @@ async function setCurrentTable(tableKey) {
 }
 
 function renderDynamicForm() {
-  $('#table-title').textContent = currentTable.label;
   $('#history-title').textContent =
     currentTable.key === 'gatepasses' ? 'Gate Passes History' : `${currentTable.label} History`;
   $('#history-panel').open = false;
   if (currentTable.key === 'gatepasses') {
     $('#gatepass-panel').classList.remove('hidden');
+    $('#asset-table-wrap').classList.add('hidden');
   } else {
     $('#gatepass-panel').classList.add('hidden');
+    $('#asset-table-wrap').classList.remove('hidden');
   }
-  const form = $('#dynamic-form');
-  const registerFormSection = getRegisterFormSection();
-  const registerTableSection = getRegisterTableSection();
+  if (currentTable.key === 'laptops') {
+    $('#laptop-status-filter').classList.remove('hidden');
+    $('#laptop-status-filter').value = laptopStatusFilter;
+  } else {
+    $('#laptop-status-filter').classList.add('hidden');
+  }
   if (currentTable.key === 'gatepasses') {
-    registerFormSection.classList.add('hidden');
-    registerTableSection.classList.add('hidden');
     $('#table-import-btn').disabled = true;
     $('#table-search-btn').disabled = true;
     $('#table-search-clear-btn').disabled = true;
     return;
   }
-  registerFormSection.classList.remove('hidden');
-  registerTableSection.classList.remove('hidden');
   $('#table-import-btn').disabled = false;
   $('#table-search-btn').disabled = false;
   $('#table-search-clear-btn').disabled = false;
-  const rowActionHelp =
-    currentTable.key === 'laptops'
-      ? 'After saving, each row will show Edit Row and Delete Row in the first column.'
-      : 'After saving, each row will show Edit Row and Delete Row in the first column.';
-  const fieldsHtml = currentTable.fields
-    .map(
-      ([key, label]) =>
-        `<label>${escapeHtml(label)}<input name="${escapeHtml(key)}" /></label>`
-    )
-    .join('');
-  form.innerHTML = `
-    <div class="form-actions-bar">
-      <button type="submit" class="btn">Save New Record</button>
-      <button type="reset" class="btn secondary">Clear Form</button>
-      <span class="form-help">Fill the fields and click Save New Record.</span>
-    </div>
-    <div class="form-actions-bar">
-      <span class="form-help">${escapeHtml(rowActionHelp)}</span>
-    </div>
-    ${fieldsHtml}
-    <div class="form-actions-bar">
-      <button type="submit" class="btn">Save New Record</button>
-      <button type="reset" class="btn secondary">Clear Form</button>
-    </div>
-  `;
 }
 
 async function loadCurrentTable() {
@@ -331,6 +383,9 @@ async function loadCurrentTable() {
   }
   const q = new URLSearchParams();
   if (currentTableSearch) q.set('search', currentTableSearch);
+  if (currentTable.key === 'laptops' && laptopStatusFilter && laptopStatusFilter !== 'all') {
+    q.set('status', laptopStatusFilter);
+  }
   const rows = await fetchJSON(`/api/register/${currentTable.key}?${q.toString()}`);
   currentRows = rows;
   const head = $('#data-head');
@@ -690,15 +745,14 @@ async function bootstrap() {
     const session = await fetchJSON('/api/auth/session');
     showApp(session.user);
     renderTableSelector();
-    $('#show-assets-btn').addEventListener('click', () => {
-      setCurrentTable('laptops').catch((e) => console.error(e));
+    $('#ws-back-btn').addEventListener('click', () => {
+      showHome();
     });
-    $('#show-gatepasses-btn').addEventListener('click', () => {
-      setCurrentTable('gatepasses').catch((e) => console.error(e));
+    $('#wsSearch').addEventListener('input', (ev) => {
+      renderWorkspaceGrid(ev.target.value);
     });
-    $('#gp-back-btn').addEventListener('click', () => {
-      setCurrentTable('laptops').catch((e) => console.error(e));
-    });
+    renderWorkspaceGrid('');
+    showHome();
     $('#table-import-btn').addEventListener('click', async () => {
       if (currentTable.key === 'gatepasses') return;
       const file = $('#table-import-file').files?.[0];
@@ -743,6 +797,10 @@ async function bootstrap() {
       if (ev.key !== 'Enter') return;
       ev.preventDefault();
       currentTableSearch = (ev.target.value || '').trim();
+      refresh().catch((e) => console.error(e));
+    });
+    $('#laptop-status-filter').addEventListener('change', (ev) => {
+      laptopStatusFilter = String(ev.target.value || 'all');
       refresh().catch((e) => console.error(e));
     });
     $('#gp-search-btn').addEventListener('click', () => {

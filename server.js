@@ -275,14 +275,26 @@ function getRegisterExportConfig(table) {
 function buildRegisterSearch(table, query) {
   const search = String(query || '').trim();
   const exportConfig = getRegisterExportConfig(table);
-  if (!search || !exportConfig) {
-    return { where: '', params: [] };
+  const clauses = [];
+  const params = [];
+
+  if (table === 'laptops') {
+    const status = String(query?.status || '').trim();
+    if (status && status !== 'all') {
+      clauses.push(`LOWER(COALESCE(asset_status, '')) = LOWER(?)`);
+      params.push(status);
+    }
   }
-  const searchColumns = exportConfig.columns.map((column) => column.key);
-  const clauses = searchColumns.map((column) => `COALESCE(CAST(${column} AS TEXT), '') LIKE ?`);
-  const params = searchColumns.map(() => `%${search}%`);
+
+  if (search && exportConfig) {
+    const searchColumns = exportConfig.columns.map((column) => column.key);
+    const searchClauses = searchColumns.map((column) => `COALESCE(CAST(${column} AS TEXT), '') LIKE ?`);
+    clauses.push(`(${searchClauses.join(' OR ')})`);
+    params.push(...searchClauses.map(() => `%${search}%`));
+  }
+
   return {
-    where: `WHERE ${clauses.join(' OR ')}`,
+    where: clauses.length ? `WHERE ${clauses.join(' AND ')}` : '',
     params,
   };
 }
@@ -1355,7 +1367,7 @@ app.get('/api/laptop-gatepasses/:id/pdf', (req, res) => {
 app.get('/api/register/:table', (req, res) => {
   const table = req.params.table;
   if (!TABLE_CONFIG[table]) return res.status(404).json({ error: 'table not found' });
-  const { where, params } = buildRegisterSearch(table, req.query.search);
+  const { where, params } = buildRegisterSearch(table, req.query);
   const rows = db.prepare(`SELECT * FROM ${table} ${where} ORDER BY id DESC`).all(...params);
   res.json(rows);
 });
