@@ -275,6 +275,14 @@ async function loginWithPassword(username, password) {
   if (!res.ok) {
     throw new Error(data?.error || res.statusText || 'Login failed');
   }
+  if (!data?.user || typeof data.user.username !== 'string') {
+    const hint = text && text.length > 0 && text.length < 400 ? text.slice(0, 400) : '';
+    throw new Error(
+      hint
+        ? `Server returned an unexpected response (not JSON). ${hint}`
+        : 'Login succeeded but the server response was missing user data. Redeploy the latest API, or clear cache and retry.'
+    );
+  }
   return data;
 }
 
@@ -372,17 +380,31 @@ async function openWorkspace(tableKey) {
   await setCurrentTable(tableKey);
 }
 
+function setLoginError(message) {
+  const el = document.querySelector('#login-error');
+  if (!el) return;
+  if (!message) {
+    el.textContent = '';
+    el.classList.add('hidden');
+    return;
+  }
+  el.textContent = message;
+  el.classList.remove('hidden');
+}
+
 function showLogin() {
   $('#login-view').classList.remove('hidden');
   $('#app-view').classList.add('hidden');
   $('#auth-user').textContent = '';
+  setLoginError('');
 }
 
 function showApp(user) {
   activeUser = user;
   $('#login-view').classList.add('hidden');
   $('#app-view').classList.remove('hidden');
-  $('#auth-user').textContent = `Logged in as ${user.username}`;
+  const name = user && typeof user.username === 'string' ? user.username : 'user';
+  $('#auth-user').textContent = `Logged in as ${name}`;
 }
 
 function escapeHtml(s) {
@@ -517,6 +539,9 @@ async function loadCurrentTable() {
     q.set('status', laptopStatusFilter);
   }
   const rows = await fetchJSON(`/api/register/${currentTable.key}?${q.toString()}`);
+  if (!Array.isArray(rows)) {
+    throw new Error('Server returned invalid data for this table (expected a list).');
+  }
   currentRows = rows;
   const head = $('#data-head');
   const body = $('#data-rows');
@@ -581,6 +606,9 @@ async function loadGatePasses() {
   if (outDateTo) q.set('out_date_to', outDateTo);
   $('#gp-export-link').href = `/api/export/gatepasses.xlsx?${q.toString()}`;
   const rows = await fetchJSON(`/api/laptop-gatepasses?${q.toString()}`);
+  if (!Array.isArray(rows)) {
+    throw new Error('Server returned invalid data for gate passes (expected a list).');
+  }
   renderGatepassBadges(rows);
   const tbody = $('#gp-rows');
   tbody.innerHTML = rows
@@ -689,19 +717,69 @@ async function refresh() {
   await loadAudit();
 }
 
-$('#login-form').addEventListener('submit', async (ev) => {
-  ev.preventDefault();
-  const fd = new FormData(ev.target);
+function readLoginForm() {
+  const form = document.querySelector('#login-form');
+  if (!form) return { username: '', password: '' };
+  const fd = new FormData(form);
+  return {
+    username: String(fd.get('username') || '').trim(),
+    password: String(fd.get('password') || ''),
+  };
+}
+
+async function performLogin() {
+  setLoginError('');
+  const btn = document.querySelector('#login-submit-btn');
+  const { username, password } = readLoginForm();
+  if (!username || !password) {
+    setLoginError('Enter username and password.');
+    return;
+  }
+  if (btn) {
+    btn.disabled = true;
+  }
   try {
-    const data = await loginWithPassword(String(fd.get('username') || '').trim(), String(fd.get('password') || ''));
+    const data = await loginWithPassword(username, password);
     if (data.token) setAuthToken(data.token);
     showApp(data.user);
     showHome();
-    ev.target.reset();
-    await refresh();
+    const form = document.querySelector('#login-form');
+    if (form) form.reset();
+    try {
+      await refresh();
+    } catch (refreshErr) {
+      console.error('[login refresh]', refreshErr);
+      clearAuthToken();
+      showLogin();
+      const rmsg =
+        refreshErr && typeof refreshErr === 'object' && 'message' in refreshErr && refreshErr.message
+          ? String(refreshErr.message)
+          : String(refreshErr || 'Could not load data');
+      setLoginError(`Signed in, but ${rmsg}. Try again or check the browser Network tab for /api errors.`);
+      return;
+    }
   } catch (err) {
-    alert(err.message);
+    const msg =
+      err && typeof err === 'object' && 'message' in err && err.message
+        ? String(err.message)
+        : String(err || 'Sign-in failed.');
+    setLoginError(msg);
+    console.error('[login]', err);
+  } finally {
+    if (btn) btn.disabled = false;
   }
+}
+
+document.querySelector('#login-form')?.addEventListener('submit', (ev) => {
+  ev.preventDefault();
+});
+document.querySelector('#login-form')?.addEventListener('keydown', (ev) => {
+  if (ev.key !== 'Enter') return;
+  ev.preventDefault();
+  performLogin().catch((e) => console.error(e));
+});
+document.querySelector('#login-submit-btn')?.addEventListener('click', () => {
+  performLogin().catch((e) => console.error(e));
 });
 
 $('#logout-btn').addEventListener('click', async () => {
