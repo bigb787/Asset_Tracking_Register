@@ -441,6 +441,10 @@ body {
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
 }
 
+.modal.modal-wide {
+  max-width: 44rem;
+}
+
 .modal-header {
   display: flex;
   align-items: center;
@@ -506,6 +510,70 @@ body {
 
 .modal-form.gatepass-grid .field-full {
   grid-column: 1 / -1;
+}
+
+.gatepass-items-wrap {
+  grid-column: 1 / -1;
+  margin-bottom: 0.5rem;
+}
+
+.gatepass-items-wrap > label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+  color: #374151;
+}
+
+.gatepass-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.gatepass-items-table th,
+.gatepass-items-table td {
+  border: 1px solid #e2e8f0;
+  padding: 4px 6px;
+  vertical-align: middle;
+}
+
+.gatepass-items-table th {
+  background: #f1f5f9;
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+.gp-add-item-row {
+  margin-top: 0.45rem;
+  font-size: 0.85rem;
+}
+
+.btn-gp-add-row {
+  border: 1px dashed #94a3b8;
+  background: #f8fafc;
+  color: #334155;
+  padding: 0.35rem 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.btn-gp-add-row:hover {
+  background: #f1f5f9;
+}
+
+.gp-item-remove {
+  color: #a32d2d;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 1.05rem;
+  line-height: 1;
+  padding: 0 0.25rem;
 }
 
 .modal-form .field-readonly input {

@@ -1,7 +1,9 @@
 import io
+import json
 import os
-import textwrap
+import re
 from datetime import datetime, timedelta
+from xml.sax.saxutils import escape
 from hmac import compare_digest
 from pathlib import Path
 
@@ -21,10 +23,11 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
+from reportlab.lib.pagesizes import A5
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import cm
-from reportlab.pdfbase.pdfmetrics import stringWidth
-from reportlab.pdfgen import canvas
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from werkzeug.security import check_password_hash
 
 from database import (
@@ -390,215 +393,350 @@ def _filter_gatepass_payload(data: dict) -> dict:
     for k, v in data.items():
         if k not in GATEPASS_MUTABLE_FIELDS:
             continue
+        if k == "asset_items":
+            if v is None or v == "":
+                out[k] = None
+            elif isinstance(v, (list, dict)):
+                out[k] = json.dumps(v)
+            else:
+                s = str(v).strip()
+                out[k] = s if s else None
+            continue
         out[k] = None if v == "" else v
     return out
 
 
 def _next_gatepass_no(conn):
-    today = datetime.now().strftime("%Y%m%d")
-    prefix = f"GP-{today}-"
-    row = conn.execute(
-        "SELECT gatepass_no FROM gatepass WHERE gatepass_no LIKE ? ORDER BY gatepass_no DESC LIMIT 1",
-        (f"{prefix}%",),
-    ).fetchone()
-    if not row:
-        return f"{prefix}001"
+    max_n = 0
+    for row in conn.execute("SELECT gatepass_no FROM gatepass"):
+        s = str(row["gatepass_no"] or "")
+        m = re.match(r"^GP-(\d+)$", s)
+        if m:
+            max_n = max(max_n, int(m.group(1)))
+            continue
+        parts = s.split("-")
+        if len(parts) >= 2 and parts[0] == "GP":
+            try:
+                max_n = max(max_n, int(parts[-1]))
+            except ValueError:
+                pass
+    return f"GP-{max_n + 1:03d}"
+
+
+def _fmt_gatepass_pdf_date(s):
+    if not s:
+        return ""
     try:
-        n = int(str(row["gatepass_no"]).rsplit("-", 1)[-1]) + 1
-    except (ValueError, IndexError):
-        n = 1
-    return f"{prefix}{n:03d}"
+        if len(str(s)) >= 10:
+            d = datetime.strptime(str(s)[:10], "%Y-%m-%d")
+            return d.strftime("%d/%m/%Y")
+    except Exception:
+        pass
+    return str(s)
 
 
 def _pdf_gatepass_buffer(row: dict):
+    """A5 Platypus PDF matching InfoDesk physical gate pass layout."""
     buf = io.BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    w, h = A4
-    m = 2 * cm
-    x_left = m
-    x_right = w - m
-    y_top = h - m
-    y_bottom = m
-    cw = x_right - x_left
-    mid_x = x_left + cw / 2
-    blue = colors.HexColor("#185FA5")
-
-    def fmt_date(s):
-        if not s:
-            return ""
-        try:
-            if len(s) >= 10:
-                d = datetime.strptime(str(s)[:10], "%Y-%m-%d")
-                return d.strftime("%d-%b-%Y")
-        except Exception:
-            pass
-        return str(s)
-
-    gpno = str(row.get("gatepass_no") or "")
-    box_pad = 0.5 * cm
-    box_w = max(
-        5.0 * cm,
-        stringWidth(gpno, "Helvetica-Bold", 11) + box_pad * 2,
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=A5,
+        rightMargin=1.5 * cm,
+        leftMargin=1.5 * cm,
+        topMargin=1.5 * cm,
+        bottomMargin=1.5 * cm,
     )
-    box_h = 1.05 * cm
-    box_x1 = x_right
-    box_x0 = box_x1 - box_w
-    box_y1 = y_top - 0.35 * cm
-    box_y0 = box_y1 - box_h
+    styles = getSampleStyleSheet()
+    story = []
 
-    c.setStrokeColor(colors.black)
-    c.setLineWidth(1)
-    c.rect(box_x0, box_y0, box_w, box_h, fill=0, stroke=1)
-    c.setFillColor(colors.black)
-    c.setFont("Helvetica-Bold", 11)
-    tw_gp = stringWidth(gpno, "Helvetica-Bold", 11)
-    c.drawString(box_x0 + (box_w - tw_gp) / 2, box_y0 + (box_h - 11) / 2 - 1, gpno)
-
-    c.setFont("Helvetica", 9)
-    c.setFillColor(colors.black)
-    c.drawString(x_left, box_y0 + (box_h - 9) / 2, "[Company Logo / Company Name]")
-
-    gap_below_top = 0.4 * cm
-    bar_h = max(1.15 * cm, 28)  # room for 24 pt + padding
-    bar_y1 = box_y0 - gap_below_top
-    bar_y0 = bar_y1 - bar_h
-    c.setFillColor(blue)
-    c.rect(x_left, bar_y0, cw, bar_h, fill=1, stroke=0)
-    title = "GATE PASS"
-    c.setFillColor(colors.white)
-    c.setFont("Helvetica-Bold", 24)
-    tw_t = stringWidth(title, "Helvetica-Bold", 24)
-    tx = x_left + (cw - tw_t) / 2
-    ty = bar_y0 + (bar_h - 24) / 2 + 5
-    c.drawString(tx, ty, title)
-    c.setFillColor(colors.black)
-
-    yy = bar_y0 - 0.55 * cm
-    lh = 0.5 * cm
-    vx = x_left + 2.9 * cm
-
-    def row_single(label, value):
-        nonlocal yy
-        c.setFont("Helvetica-Bold", 10)
-        c.drawString(x_left, yy, label)
-        c.setFont("Helvetica", 10)
-        c.drawString(vx, yy, str(value or ""))
-        yy -= lh
-
-    def row_pair(label1, val1, label2, val2):
-        nonlocal yy
-        c.setFont("Helvetica-Bold", 10)
-        c.drawString(x_left, yy, label1)
-        c.setFont("Helvetica", 10)
-        c.drawString(vx, yy, str(val1 or ""))
-        c.setFont("Helvetica-Bold", 10)
-        c.drawString(mid_x, yy, label2)
-        c.setFont("Helvetica", 10)
-        c.drawString(mid_x + 2.4 * cm, yy, str(val2 or ""))
-        yy -= lh
-
-    row_single("Date:", fmt_date(row.get("gatepass_date")))
-    row_single("Department:", row.get("department"))
-    row_pair(
-        "Requested By:",
-        row.get("requested_by"),
-        "Approved By:",
-        row.get("approved_by"),
+    company_style = ParagraphStyle(
+        "gp_company",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=13,
+        alignment=TA_CENTER,
+        spaceAfter=2,
+    )
+    addr_style = ParagraphStyle(
+        "gp_addr",
+        parent=styles["Normal"],
+        fontName="Helvetica",
+        fontSize=8,
+        alignment=TA_CENTER,
+        spaceAfter=2,
+        textColor=colors.HexColor("#444444"),
+    )
+    story.append(Paragraph("InfoDesk India Private Limited", company_style))
+    story.append(Paragraph("12B Nutan Bharat Alkapuri, Vadodara", addr_style))
+    story.append(
+        Paragraph(
+            "390007 Gujarat, India",
+            ParagraphStyle("addr2", parent=addr_style, spaceAfter=8),
+        )
     )
 
-    c.setFont("Helvetica-Bold", 10)
-    c.drawString(x_left, yy, "Purpose:")
-    yy -= 0.35 * cm
-    c.setFont("Helvetica", 10)
-    wrap_w = max(20, int(cw / (6.5)))
-    for line in textwrap.wrap(str(row.get("purpose") or ""), width=wrap_w) or [""]:
-        c.drawString(x_left, yy, line)
-        yy -= 0.4 * cm
-    yy -= 0.15 * cm
-
-    # Asset table: full grid
-    row1_h = 0.62 * cm
-    row2_h = 0.95 * cm
-    w1 = 0.50 * cw
-    w2 = 0.30 * cw
-    w3 = cw - w1 - w2
-    tbl_top = yy
-    tbl_mid = tbl_top - row1_h
-    tbl_bot = tbl_mid - row2_h
-    x0, x1, x2, x3 = x_left, x_left + w1, x_left + w1 + w2, x_right
-
-    c.setStrokeColor(colors.black)
-    c.setLineWidth(0.75)
-    c.line(x0, tbl_top, x3, tbl_top)
-    c.line(x0, tbl_mid, x3, tbl_mid)
-    c.line(x0, tbl_bot, x3, tbl_bot)
-    c.line(x0, tbl_top, x0, tbl_bot)
-    c.line(x1, tbl_top, x1, tbl_bot)
-    c.line(x2, tbl_top, x2, tbl_bot)
-    c.line(x3, tbl_top, x3, tbl_bot)
-
-    header_mid_y = (tbl_top + tbl_mid) / 2 - 3
-    c.setFont("Helvetica-Bold", 9)
-    c.drawString(x0 + 0.15 * cm, header_mid_y, "Asset Description")
-    c.drawString(x1 + 0.12 * cm, header_mid_y, "Serial No")
-    c.drawString(x2 + 0.12 * cm, header_mid_y, "Qty")
-    c.setFont("Helvetica", 9)
-    data_mid_y = (tbl_mid + tbl_bot) / 2 - 3
-    desc_txt = str(row.get("asset_description") or "")
-    c.drawString(x0 + 0.15 * cm, data_mid_y, desc_txt[:95] + ("…" if len(desc_txt) > 95 else ""))
-    c.drawString(x1 + 0.12 * cm, data_mid_y, str(row.get("asset_serial_no") or ""))
-    c.drawString(x2 + 0.12 * cm, data_mid_y, str(row.get("quantity") or ""))
-    yy = tbl_bot - 0.45 * cm
-
-    row_single("Expected Return:", fmt_date(row.get("expected_return_date")))
-    row_single("Actual Return:", fmt_date(row.get("actual_return_date")))
-    row_pair(
-        "Gate Out Time:",
-        row.get("gate_out_time"),
-        "Gate In Time:",
-        row.get("gate_in_time"),
+    gate_pass_label = Table(
+        [["GATE PASS"]],
+        colWidths=[7 * cm],
     )
-
-    c.setFont("Helvetica-Bold", 10)
-    c.drawString(x_left, yy, "Remarks:")
-    yy -= 0.35 * cm
-    c.setFont("Helvetica", 10)
-    for line in textwrap.wrap(str(row.get("remarks") or ""), width=wrap_w) or [""]:
-        c.drawString(x_left, yy, line)
-        yy -= 0.4 * cm
-    yy -= 0.15 * cm
-
-    row_pair(
-        "Security Guard:",
-        row.get("security_guard"),
-        "Status:",
-        row.get("status"),
+    gate_pass_label.setStyle(
+        TableStyle(
+            [
+                ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, -1), 16),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("BOX", (0, 0), (-1, -1), 2, colors.black),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ]
+        )
     )
+    wrapper = Table([[gate_pass_label]], colWidths=[doc.width])
+    wrapper.setStyle(TableStyle([("ALIGN", (0, 0), (-1, -1), "CENTER")]))
+    story.append(wrapper)
+    story.append(Spacer(1, 0.35 * cm))
 
-    sig_line_w = 6 * cm
-    sig_gap_above_footer = 1.35 * cm
-    label_off = 0.32 * cm
-    sig_y = y_bottom + sig_gap_above_footer + 0.55 * cm
-    c.setLineWidth(0.9)
-    c.line(x_left, sig_y, x_left + sig_line_w, sig_y)
-    c.line(x_right - sig_line_w, sig_y, x_right, sig_y)
-    c.setFont("Helvetica", 9)
-    c.drawCentredString(x_left + sig_line_w / 2, sig_y - label_off, "Requested By (Signature)")
-    c.drawCentredString(x_right - sig_line_w / 2, sig_y - label_off, "Approved By (Signature)")
-
-    ts = datetime.now().strftime("%d-%b-%Y %H:%M:%S")
-    c.setFont("Helvetica", 8)
-    c.setFillColor(colors.HexColor("#444444"))
-    c.drawCentredString(
-        w / 2,
-        y_bottom + 0.45 * cm,
-        "This is a system generated document",
+    pass_type = str(row.get("pass_type") or "Returnable / Outward").strip() or "Returnable / Outward"
+    type_style = ParagraphStyle(
+        "gp_type",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=10,
+        alignment=TA_CENTER,
+        spaceAfter=6,
     )
-    c.drawCentredString(w / 2, y_bottom + 0.2 * cm, ts)
-    c.setFillColor(colors.black)
+    story.append(Paragraph(escape(pass_type), type_style))
+    story.append(Spacer(1, 0.2 * cm))
 
-    c.showPage()
-    c.save()
+    field_style = ParagraphStyle(
+        "gp_field",
+        parent=styles["Normal"],
+        fontName="Helvetica",
+        fontSize=9,
+        alignment=TA_LEFT,
+    )
+    issued_to = escape(str(row.get("issued_to") or ""))
+    person = escape(str(row.get("person") or ""))
+    issued_table = Table(
+        [
+            [
+                Paragraph(f"<b>Issued to:</b> {issued_to}", field_style),
+                Paragraph(f"<b>Person:</b> {person}", field_style),
+            ]
+        ],
+        colWidths=[doc.width * 0.58, doc.width * 0.42],
+    )
+    issued_table.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ]
+        )
+    )
+    story.append(issued_table)
+    story.append(Spacer(1, 0.2 * cm))
+
+    gp_no = escape(str(row.get("gatepass_no") or ""))
+    gp_date = escape(_fmt_gatepass_pdf_date(row.get("gatepass_date")))
+    no_date_table = Table(
+        [
+            [
+                Paragraph(f"<b>No:</b> {gp_no}", field_style),
+                Paragraph(f"<b>Date:</b> {gp_date}", field_style),
+            ]
+        ],
+        colWidths=[doc.width * 0.5, doc.width * 0.5],
+    )
+    no_date_table.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ]
+        )
+    )
+    story.append(no_date_table)
+    story.append(Spacer(1, 0.35 * cm))
+
+    raw_items = row.get("asset_items") or "[]"
+    try:
+        if isinstance(raw_items, str):
+            items = json.loads(raw_items) if raw_items.strip() else []
+        elif isinstance(raw_items, list):
+            items = raw_items
+        else:
+            items = []
+    except Exception:
+        items = []
+
+    num_item_rows = 5
+    cell_style = ParagraphStyle(
+        "gp_cell",
+        parent=styles["Normal"],
+        fontName="Helvetica",
+        fontSize=8,
+        alignment=TA_CENTER,
+        leading=9,
+    )
+    desc_cell_style = ParagraphStyle(
+        "gp_desc",
+        parent=cell_style,
+        alignment=TA_LEFT,
+    )
+    hdr_style = ParagraphStyle(
+        "gp_hdr",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=8,
+        alignment=TA_CENTER,
+        leading=9,
+    )
+    items_header = [
+        [
+            Paragraph("Sr.<br/>No.", hdr_style),
+            Paragraph("Description", hdr_style),
+            Paragraph("Unit", hdr_style),
+            Paragraph("Qty.", hdr_style),
+            Paragraph("Rmks", hdr_style),
+        ]
+    ]
+    items_rows = []
+    for i in range(num_item_rows):
+        if i < len(items):
+            it = items[i] or {}
+            d = escape(str(it.get("description") or ""))
+            u = escape(str(it.get("unit") or ""))
+            q = escape(str(it.get("qty") or ""))
+            rmk = escape(str(it.get("remarks") or ""))
+            items_rows.append(
+                [
+                    Paragraph(str(i + 1), cell_style),
+                    Paragraph(d, desc_cell_style),
+                    Paragraph(u, cell_style),
+                    Paragraph(q, cell_style),
+                    Paragraph(rmk, cell_style),
+                ]
+            )
+        else:
+            items_rows.append(
+                [
+                    Paragraph(str(i + 1), cell_style),
+                    Paragraph("", desc_cell_style),
+                    Paragraph("", cell_style),
+                    Paragraph("", cell_style),
+                    Paragraph("", cell_style),
+                ]
+            )
+
+    cw0 = doc.width * 0.1
+    cw1 = doc.width * 0.42
+    cw2 = doc.width * 0.14
+    cw3 = doc.width * 0.12
+    cw4 = doc.width - cw0 - cw1 - cw2 - cw3
+    full_items_data = items_header + items_rows
+    row_heights = [0.75 * cm] + [0.85 * cm] * num_item_rows
+    items_table = Table(
+        full_items_data,
+        colWidths=[cw0, cw1, cw2, cw3, cw4],
+        rowHeights=row_heights,
+    )
+    items_table.setStyle(
+        TableStyle(
+            [
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("ALIGN", (1, 1), (1, -1), "LEFT"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.black),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E8E8E8")),
+            ]
+        )
+    )
+    story.append(items_table)
+    story.append(Spacer(1, 0.45 * cm))
+
+    sig_style = ParagraphStyle(
+        "gp_sig",
+        parent=styles["Normal"],
+        fontName="Helvetica",
+        fontSize=8,
+        alignment=TA_CENTER,
+    )
+    sig_bold = ParagraphStyle(
+        "gp_sig_b",
+        parent=styles["Normal"],
+        fontName="Helvetica-Bold",
+        fontSize=8,
+        alignment=TA_CENTER,
+    )
+    dh = escape(str(row.get("department_head") or ""))
+    si = escape(str(row.get("security_incharge") or ""))
+    sig_table = Table(
+        [
+            [
+                Paragraph("<b>Department Head</b>", sig_bold),
+                Paragraph("<b>Security Incharge</b>", sig_bold),
+            ],
+            [
+                Paragraph(dh, sig_style),
+                Paragraph(si, sig_style),
+            ],
+            [
+                Paragraph("___________________", sig_style),
+                Paragraph("___________________", sig_style),
+            ],
+        ],
+        colWidths=[doc.width * 0.5, doc.width * 0.5],
+    )
+    sig_table.setStyle(
+        TableStyle(
+            [
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ]
+        )
+    )
+    story.append(sig_table)
+    story.append(Spacer(1, 0.35 * cm))
+
+    recv_name = escape(str(row.get("receiver_name") or ""))
+    recv_left = ParagraphStyle(
+        "gp_recv",
+        parent=sig_style,
+        alignment=TA_LEFT,
+    )
+    recv_bold_left = ParagraphStyle(
+        "gp_recv_b",
+        parent=sig_bold,
+        alignment=TA_LEFT,
+    )
+    recv_table = Table(
+        [
+            [Paragraph("<b>Receiver's Sign</b>", recv_bold_left), ""],
+            [Paragraph(recv_name, recv_left), ""],
+            [Paragraph("___________________", recv_left), ""],
+        ],
+        colWidths=[doc.width * 0.65, doc.width * 0.35],
+    )
+    recv_table.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("TOPPADDING", (0, 0), (-1, -1), 2),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ]
+        )
+    )
+    story.append(recv_table)
+
+    doc.build(story)
     buf.seek(0)
     return buf
 

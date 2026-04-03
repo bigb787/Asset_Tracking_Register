@@ -213,24 +213,14 @@
   ];
 
   const GATEPASS_FORM_KEYS = [
+    "pass_type",
     "gatepass_date",
-    "department",
-    "requested_by",
-    "approved_by",
-    "purpose",
-    "asset_description",
-    "asset_serial_no",
-    "quantity",
-    "expected_return_date",
-    "actual_return_date",
-    "gate_out_time",
-    "gate_in_time",
-    "security_guard",
-    "remarks",
-    "status",
+    "issued_to",
+    "person",
+    "department_head",
+    "security_incharge",
+    "receiver_name",
   ];
-
-  const GATEPASS_STATUS = ["Open", "Closed", "Cancelled"];
 
   const ASSET_STATUS_OPTIONS = ["Active", "Idle", "Offline", "Maintenance"];
 
@@ -238,6 +228,8 @@
 
   let currentTable = null;
   let editRowId = null;
+  let gatepassModalMode = false;
+  let editGatepassId = null;
 
   const $ = (sel) => document.querySelector(sel);
 
@@ -374,42 +366,149 @@
     window.open(`/api/gatepass/${id}/pdf`, "_blank");
   }
 
+  function parseGatepassItems(raw) {
+    if (raw == null || raw === "") return [];
+    if (Array.isArray(raw)) return raw;
+    try {
+      const j = JSON.parse(String(raw));
+      return Array.isArray(j) ? j : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function renumberGatepassItemRows() {
+    const tbody = document.getElementById("itemsBody");
+    if (!tbody) return;
+    tbody.querySelectorAll("tr").forEach((tr, i) => {
+      const c0 = tr.cells[0];
+      if (c0) c0.textContent = String(i + 1);
+    });
+  }
+
+  function gatepassItemRowHtml(desc, unit, qty, remarks) {
+    const d = desc == null ? "" : escapeHtml(String(desc));
+    const u = unit == null ? "" : escapeHtml(String(unit));
+    const q = qty == null ? "" : escapeHtml(String(qty));
+    const rmk = remarks == null ? "" : escapeHtml(String(remarks));
+    return `<tr>
+      <td style="text-align:center;padding:6px;">0</td>
+      <td><input type="text" class="gp-item-desc" style="width:100%;border:none;outline:none;font-size:13px;" value="${d}"></td>
+      <td><input type="text" class="gp-item-unit" style="width:100%;border:none;outline:none;font-size:13px;" value="${u}"></td>
+      <td><input type="text" class="gp-item-qty" style="width:100%;border:none;outline:none;font-size:13px;" value="${q}"></td>
+      <td><input type="text" class="gp-item-remarks" style="width:100%;border:none;outline:none;font-size:13px;" value="${rmk}"></td>
+      <td style="text-align:center;"><button type="button" class="gp-item-remove" aria-label="Remove row">×</button></td>
+    </tr>`;
+  }
+
+  function addGatepassItemRow(data) {
+    const tbody = document.getElementById("itemsBody");
+    if (!tbody) return;
+    const wrap = document.createElement("tbody");
+    wrap.innerHTML = gatepassItemRowHtml(
+      data && data.description,
+      data && data.unit,
+      data && data.qty,
+      data && data.remarks
+    );
+    tbody.appendChild(wrap.firstElementChild);
+    renumberGatepassItemRows();
+  }
+
+  function collectGatepassItems() {
+    const tbody = document.getElementById("itemsBody");
+    if (!tbody) return [];
+    return Array.from(tbody.querySelectorAll("tr"))
+      .map((row) => ({
+        description: (row.querySelector(".gp-item-desc") && row.querySelector(".gp-item-desc").value) || "",
+        unit: (row.querySelector(".gp-item-unit") && row.querySelector(".gp-item-unit").value) || "",
+        qty: (row.querySelector(".gp-item-qty") && row.querySelector(".gp-item-qty").value) || "",
+        remarks: (row.querySelector(".gp-item-remarks") && row.querySelector(".gp-item-remarks").value) || "",
+      }))
+      .filter((item) => String(item.description).trim() !== "");
+  }
+
+  function wireGatepassItemsUi() {
+    const addBtn = document.getElementById("btnAddItemRow");
+    if (addBtn) {
+      addBtn.addEventListener("click", () => {
+        addGatepassItemRow(null);
+      });
+    }
+    const tbody = document.getElementById("itemsBody");
+    if (tbody) {
+      tbody.addEventListener("click", (ev) => {
+        const t = ev.target;
+        if (!t || !t.classList || !t.classList.contains("gp-item-remove")) return;
+        ev.preventDefault();
+        const rows = tbody.querySelectorAll("tr");
+        if (rows.length <= 1) return;
+        const tr = t.closest("tr");
+        if (tr) tr.remove();
+        renumberGatepassItemRows();
+      });
+    }
+  }
+
   function buildGatepassForm(row) {
     const isEdit = row && row.id;
     const today = new Date().toISOString().slice(0, 10);
     const r = row || {};
     const v = (k) => (r[k] == null ? "" : escapeHtml(String(r[k])));
     const d = (k) => toDateInputValue(r[k]);
-    const tm = (k) => toTimeInputValue(r[k]);
 
     const roBlock = isEdit
       ? `<div class="field field-full field-readonly"><label>Gatepass No</label><input type="text" name="gatepass_no" readonly value="${v("gatepass_no")}"></div>`
-      : `<div class="field field-full field-readonly"><label>Gatepass No</label><input type="text" readonly value="" placeholder="Auto-generated on save"></div>`;
+      : `<div class="field field-full field-readonly"><label>Gatepass No</label><input type="text" readonly value="" placeholder="Auto-generated on save (GP-001)"></div>`;
 
-    const stSel = String(r.status || "Open");
-    const statusOpts = GATEPASS_STATUS.map(
-      (s) =>
-        `<option value="${escapeHtml(s)}" ${stSel === s ? "selected" : ""}>${escapeHtml(s)}</option>`
-    ).join("");
+    const passType = String(r.pass_type || "Returnable / Outward");
+    const passSel = (val, label) =>
+      `<option value="${escapeHtml(val)}" ${passType === val ? "selected" : ""}>${escapeHtml(label)}</option>`;
 
-    return (
+    const items = parseGatepassItems(r.asset_items);
+    const nRows = isEdit ? Math.max(3, items.length) : 3;
+    let itemsBody = "";
+    for (let i = 0; i < nRows; i++) {
+      const it = items[i] || {};
+      itemsBody += gatepassItemRowHtml(it.description, it.unit, it.qty, it.remarks);
+    }
+
+    const html =
       roBlock +
-      `<div class="field"><label for="gp-date">Gatepass Date</label><input type="date" id="gp-date" name="gatepass_date" value="${isEdit ? d("gatepass_date") : today}"></div>
-      <div class="field"><label for="gp-dept">Department</label><input type="text" id="gp-dept" name="department" value="${v("department")}"></div>
-      <div class="field"><label for="gp-req">Requested By</label><input type="text" id="gp-req" name="requested_by" value="${v("requested_by")}"></div>
-      <div class="field"><label for="gp-app">Approved By</label><input type="text" id="gp-app" name="approved_by" value="${v("approved_by")}"></div>
-      <div class="field field-full"><label for="gp-purpose">Purpose</label><textarea id="gp-purpose" name="purpose">${r.purpose == null ? "" : escapeHtml(r.purpose)}</textarea></div>
-      <div class="field field-full"><label for="gp-ad">Asset Description</label><textarea id="gp-ad" name="asset_description">${r.asset_description == null ? "" : escapeHtml(r.asset_description)}</textarea></div>
-      <div class="field"><label for="gp-sn">Asset Serial No</label><input type="text" id="gp-sn" name="asset_serial_no" value="${v("asset_serial_no")}"></div>
-      <div class="field"><label for="gp-qty">Quantity</label><input type="number" id="gp-qty" name="quantity" step="1" value="${r.quantity == null ? "" : escapeHtml(String(r.quantity))}"></div>
-      <div class="field"><label for="gp-erd">Expected Return Date</label><input type="date" id="gp-erd" name="expected_return_date" value="${d("expected_return_date")}"></div>
-      <div class="field"><label for="gp-ard">Actual Return Date</label><input type="date" id="gp-ard" name="actual_return_date" value="${d("actual_return_date")}"></div>
-      <div class="field"><label for="gp-out">Gate Out Time</label><input type="time" id="gp-out" name="gate_out_time" value="${tm("gate_out_time")}"></div>
-      <div class="field"><label for="gp-in">Gate In Time</label><input type="time" id="gp-in" name="gate_in_time" value="${tm("gate_in_time")}"></div>
-      <div class="field"><label for="gp-guard">Security Guard</label><input type="text" id="gp-guard" name="security_guard" value="${v("security_guard")}"></div>
-      <div class="field"><label for="gp-status">Status</label><select id="gp-status" name="status">${statusOpts}</select></div>
-      <div class="field field-full"><label for="gp-rem">Remarks</label><textarea id="gp-rem" name="remarks">${r.remarks == null ? "" : escapeHtml(r.remarks)}</textarea></div>`
-    );
+      `<div class="field">
+        <label for="gp-pass-type">Pass type</label>
+        <select id="gp-pass-type" name="pass_type">${passSel("Returnable / Outward", "Returnable")}${passSel(
+          "Outward",
+          "Outward"
+        )}</select>
+      </div>
+      <div class="field"><label for="gp-date">Date</label><input type="date" id="gp-date" name="gatepass_date" value="${
+        isEdit ? d("gatepass_date") : today
+      }"></div>
+      <div class="field field-full"><label for="gp-issued">Issued to</label><input type="text" id="gp-issued" name="issued_to" value="${v(
+        "issued_to"
+      )}" placeholder="Person receiving the pass"></div>
+      <div class="field field-full"><label for="gp-person">Person</label><input type="text" id="gp-person" name="person" value="${v(
+        "person"
+      )}" placeholder="Person accompanying"></div>
+      <div class="gatepass-items-wrap field-full">
+        <label>Items</label>
+        <table class="gatepass-items-table">
+          <thead><tr><th>Sr.No</th><th>Description</th><th>Unit</th><th>Qty</th><th>Remarks</th><th></th></tr></thead>
+          <tbody id="itemsBody">${itemsBody}</tbody>
+        </table>
+        <div class="gp-add-item-row"><button type="button" class="btn-gp-add-row" id="btnAddItemRow">+ Add Row</button></div>
+      </div>
+      <div class="field"><label for="gp-dept-head">Department Head</label><input type="text" id="gp-dept-head" name="department_head" value="${v(
+        "department_head"
+      )}"></div>
+      <div class="field"><label for="gp-sec">Security Incharge</label><input type="text" id="gp-sec" name="security_incharge" value="${v(
+        "security_incharge"
+      )}"></div>
+      <div class="field field-full"><label for="gp-recv">Receiver Name</label><input type="text" id="gp-recv" name="receiver_name" value="${v(
+        "receiver_name"
+      )}"></div>`;
+    return html;
   }
 
   function readGatepassPayload() {
@@ -426,7 +525,7 @@
   }
 
   async function submitGatepassForm() {
-    const payload = readGatepassPayload();
+    const payload = { ...readGatepassPayload(), asset_items: collectGatepassItems() };
     try {
       if (editGatepassId == null) {
         await api("/api/gatepass", { method: "POST", body: JSON.stringify(payload) });
@@ -451,6 +550,10 @@
     const form = $("#modal-form");
     form.className = "modal-form gatepass-grid";
     form.innerHTML = buildGatepassForm(null);
+    renumberGatepassItemRows();
+    wireGatepassItemsUi();
+    const panel = document.getElementById("modal-panel");
+    if (panel) panel.classList.add("modal-wide");
     $("#modal-overlay").hidden = false;
   }
 
@@ -461,37 +564,31 @@
     const form = $("#modal-form");
     form.className = "modal-form gatepass-grid";
     form.innerHTML = buildGatepassForm(row);
+    renumberGatepassItemRows();
+    wireGatepassItemsUi();
+    const panel = document.getElementById("modal-panel");
+    if (panel) panel.classList.add("modal-wide");
     $("#modal-overlay").hidden = false;
   }
 
   async function loadGatepassRows() {
     const tbody = $("#gatepass-tbody");
-    tbody.innerHTML = '<tr><td colspan="9" class="empty-state">Loading…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Loading…</td></tr>';
     try {
       const rows = await api("/api/gatepass");
       tbody.innerHTML = "";
       if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No gatepass records yet.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No gatepass records yet.</td></tr>';
         return;
       }
       for (const row of rows) {
-        const purposeShort =
-          row.purpose && String(row.purpose).length > 40
-            ? escapeHtml(String(row.purpose).slice(0, 40)) + "…"
-            : escapeHtml(row.purpose || "");
-        const ad = row.asset_description || "";
-        const assetCell =
-          ad.length > 35 ? escapeHtml(ad.slice(0, 35)) + "…" : escapeHtml(ad);
         const tr = document.createElement("tr");
         tr.innerHTML = `
           <td>${escapeHtml(row.gatepass_no || "")}</td>
           <td>${escapeHtml(row.gatepass_date || "")}</td>
-          <td>${escapeHtml(row.department || "")}</td>
-          <td>${escapeHtml(row.requested_by || "")}</td>
-          <td>${escapeHtml(row.approved_by || "")}</td>
-          <td>${purposeShort}</td>
-          <td>${assetCell}</td>
-          <td>${escapeHtml(row.status || "")}</td>
+          <td>${escapeHtml(row.pass_type || "")}</td>
+          <td>${escapeHtml(row.issued_to || "")}</td>
+          <td>${escapeHtml(row.person || "")}</td>
           <td class="actions-cell">
             <button type="button" class="btn btn-sm btn-edit-primary gp-edit" data-id="${row.id}">Edit</button>
             <button type="button" class="btn btn-danger btn-sm gp-del" data-id="${row.id}">Delete</button>
@@ -517,7 +614,7 @@
         b.addEventListener("click", () => printGatepass(Number(b.getAttribute("data-id"))));
       });
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="9" class="empty-state">${escapeHtml(e.message)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" class="empty-state">${escapeHtml(e.message)}</td></tr>`;
     }
   }
 
@@ -634,6 +731,8 @@
     editRowId = null;
     gatepassModalMode = false;
     editGatepassId = null;
+    const panel = document.getElementById("modal-panel");
+    if (panel) panel.classList.remove("modal-wide");
     const f = $("#modal-form");
     f.innerHTML = "";
     f.className = "modal-form";

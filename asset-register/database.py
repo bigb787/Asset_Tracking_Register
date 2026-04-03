@@ -183,6 +183,13 @@ TABLE_COLUMNS = {
 GATEPASS_MUTABLE_FIELDS = frozenset(
     {
         "gatepass_date",
+        "pass_type",
+        "issued_to",
+        "person",
+        "department_head",
+        "security_incharge",
+        "receiver_name",
+        "asset_items",
         "department",
         "requested_by",
         "approved_by",
@@ -199,6 +206,24 @@ GATEPASS_MUTABLE_FIELDS = frozenset(
         "status",
     }
 )
+
+_EXTRA_GATEPASS_COLS = (
+    ("pass_type", "TEXT DEFAULT 'Returnable / Outward'"),
+    ("issued_to", "TEXT"),
+    ("person", "TEXT"),
+    ("department_head", "TEXT"),
+    ("security_incharge", "TEXT"),
+    ("receiver_name", "TEXT"),
+    ("asset_items", "TEXT"),
+)
+
+
+def _ensure_gatepass_columns(conn):
+    cur = conn.execute("PRAGMA table_info(gatepass)")
+    have = {row[1] for row in cur.fetchall()}
+    for name, decl in _EXTRA_GATEPASS_COLS:
+        if name not in have:
+            conn.execute(f"ALTER TABLE gatepass ADD COLUMN {name} {decl}")
 
 _MIGRATION_SQL = """
 DROP TABLE IF EXISTS assets;
@@ -301,6 +326,13 @@ CREATE TABLE IF NOT EXISTS gatepass (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   gatepass_no TEXT UNIQUE NOT NULL,
   gatepass_date TEXT,
+  pass_type TEXT DEFAULT 'Returnable / Outward',
+  issued_to TEXT,
+  person TEXT,
+  department_head TEXT,
+  security_incharge TEXT,
+  receiver_name TEXT,
+  asset_items TEXT,
   department TEXT,
   requested_by TEXT,
   approved_by TEXT,
@@ -333,6 +365,7 @@ def migrate():
     conn = get_connection()
     try:
         conn.executescript(_MIGRATION_SQL)
+        _ensure_gatepass_columns(conn)
         conn.commit()
     finally:
         conn.close()
