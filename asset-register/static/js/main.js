@@ -271,6 +271,10 @@
         data = text;
       }
     }
+    if (res.status === 401) {
+      window.location.href = "/login?next=" + encodeURIComponent(window.location.pathname);
+      throw new Error("Unauthorized");
+    }
     if (!res.ok) {
       const msg = (data && data.error) || res.statusText || "Request failed";
       throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));

@@ -9,8 +9,13 @@
 <body>
   <header class="site-header">
     <div class="header-inner">
-      <h1 id="page-title">Asset Register — Select a Table</h1>
-      <p class="header-sub" id="header-sub" hidden>Tables</p>
+      <div class="header-titles">
+        <h1 id="page-title">Asset Register — Select a Table</h1>
+        <p class="header-sub" id="header-sub" hidden>Tables</p>
+      </div>
+      {% if auth_enabled %}
+      <a class="header-logout" href="{{ url_for('logout') }}">Log out</a>
+      {% endif %}
     </div>
   </header>
   <main class="site-main">

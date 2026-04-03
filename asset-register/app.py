@@ -1,8 +1,20 @@
 import os
+from datetime import timedelta
+from hmac import compare_digest
 from pathlib import Path
 
 from dotenv import load_dotenv
-from flask import Flask, abort, jsonify, render_template, request
+from flask import (
+    Flask,
+    abort,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
+from werkzeug.security import check_password_hash
 
 from database import ALLOWED_TABLES, TABLE_COLUMNS, TABLE_ORDER, get_connection, migrate
 
@@ -10,6 +22,89 @@ load_dotenv(Path(__file__).resolve().parent / ".env")
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-change-me")
+app.permanent_session_lifetime = timedelta(days=7)
+
+
+def _auth_user():
+    return (os.environ.get("ASSET_REGISTER_AUTH_USER") or "").strip()
+
+
+def auth_configured():
+    if not _auth_user():
+        return False
+    if os.environ.get("ASSET_REGISTER_AUTH_PASSWORD_HASH"):
+        return True
+    return bool(os.environ.get("ASSET_REGISTER_AUTH_PASSWORD"))
+
+
+def _password_ok(plain: str) -> bool:
+    ph = os.environ.get("ASSET_REGISTER_AUTH_PASSWORD_HASH")
+    if ph:
+        return check_password_hash(ph, plain or "")
+    expected = os.environ.get("ASSET_REGISTER_AUTH_PASSWORD", "")
+    if not expected or plain is None:
+        return False
+    try:
+        a = plain.encode("utf-8")
+        b = expected.encode("utf-8")
+        if len(a) != len(b):
+            return False
+        return compare_digest(a, b)
+    except Exception:
+        return False
+
+
+def _safe_next(target: str):
+    if not target or not target.startswith("/") or target.startswith("//"):
+        return url_for("index")
+    return target
+
+
+@app.context_processor
+def inject_auth():
+    return {"auth_enabled": auth_configured()}
+
+
+@app.before_request
+def require_login():
+    if not auth_configured():
+        return None
+    if request.endpoint in ("login", "static"):
+        return None
+    if request.path.startswith("/static/"):
+        return None
+    if session.get("auth_ok") is True:
+        return None
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "Unauthorized"}), 401
+    return redirect(url_for("login", next=request.path))
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if not auth_configured():
+        return redirect(url_for("index"))
+    error = None
+    next_url = request.args.get("next") or ""
+    if request.method == "POST":
+        next_url = request.form.get("next") or next_url
+        username = (request.form.get("username") or "").strip()
+        password = request.form.get("password") or ""
+        if username == _auth_user() and _password_ok(password):
+            session.clear()
+            session["auth_ok"] = True
+            session.permanent = True
+            return redirect(_safe_next(next_url))
+        error = "Invalid username or password."
+    return render_template("login.html", error=error, next=next_url)
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    if auth_configured():
+        return redirect(url_for("login"))
+    return redirect(url_for("index"))
 
 
 def _validate_table(name: str) -> str:
