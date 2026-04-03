@@ -82,9 +82,10 @@ function ensureDefaultAuthUser() {
 
 function authCookieSecureFlag() {
   const override = String(process.env.AUTH_COOKIE_SECURE || '').toLowerCase();
-  if (override === '0' || override === 'false') return false;
-  if (override === '1' || override === 'true') return true;
-  return process.env.NODE_ENV === 'production';
+  if (override === '1' || override === 'true' || override === 'yes') return true;
+  if (override === '0' || override === 'false' || override === 'no') return false;
+  /** Default false so login works over plain http:// (e.g. internal IP). Set AUTH_COOKIE_SECURE=1 when the app is only served over HTTPS. */
+  return false;
 }
 
 function authCookieOptions() {

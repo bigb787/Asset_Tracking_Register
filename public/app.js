@@ -157,21 +157,26 @@ function apiUrl(path) {
 }
 
 const AUTH_TOKEN_KEY = 'asset_register_jwt';
+/** When sessionStorage is blocked, keep JWT in memory for this tab so API calls still work. */
+let authTokenMemory = '';
 
 function getAuthToken() {
   try {
-    return sessionStorage.getItem(AUTH_TOKEN_KEY) || '';
+    const fromStore = sessionStorage.getItem(AUTH_TOKEN_KEY) || '';
+    if (fromStore) return fromStore;
   } catch {
-    return '';
+    /* private mode / blocked storage */
   }
+  return authTokenMemory || '';
 }
 
 function setAuthToken(token) {
+  authTokenMemory = token || '';
   try {
     if (token) sessionStorage.setItem(AUTH_TOKEN_KEY, token);
     else sessionStorage.removeItem(AUTH_TOKEN_KEY);
   } catch {
-    /* ignore private mode / blocked storage */
+    /* still have authTokenMemory */
   }
 }
 
