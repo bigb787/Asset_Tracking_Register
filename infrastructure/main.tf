@@ -82,6 +82,8 @@ User=root
 WorkingDirectory=$SUBAPP
 Environment=DATABASE_PATH=$DB_PATH
 Environment=SECRET_KEY=change-me-in-production
+Environment=ASSET_REGISTER_AUTH_USER=${var.asset_register_auth_user}
+Environment=ASSET_REGISTER_AUTH_PASSWORD=${var.asset_register_auth_password}
 Environment=GATEPASS_S3_BUCKET=${local.backup_bucket}
 Environment=GATEPASS_S3_PREFIX=GatePass
 EnvironmentFile=-$SUBAPP/.env

@@ -10,6 +10,15 @@
   <main class="login-main">
     <div class="login-card">
       <h1>Asset Register</h1>
+      {% if misconfigured %}
+      <p class="login-lead">Sign-in is required, but this server is not configured yet.</p>
+      <p class="login-error" role="alert">
+        Set environment variables <strong>ASSET_REGISTER_AUTH_USER</strong> and
+        <strong>ASSET_REGISTER_AUTH_PASSWORD</strong> (or <strong>ASSET_REGISTER_AUTH_PASSWORD_HASH</strong>),
+        then restart the application. For local development only, you may set
+        <strong>ASSET_REGISTER_AUTH_DISABLED=1</strong> to skip login (do not use in production).
+      </p>
+      {% else %}
       <p class="login-lead">Sign in to continue.</p>
       {% if error %}
       <p class="login-error" role="alert">{{ error }}</p>
@@ -28,6 +37,7 @@
         </label>
         <button type="submit" class="btn btn-primary btn-block">Sign in</button>
       </form>
+      {% endif %}
     </div>
   </main>
 </body>

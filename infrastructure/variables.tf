@@ -69,3 +69,16 @@ variable "backup_schedule_cron" {
   type        = string
   default     = "30 2 * * *"
 }
+
+variable "asset_register_auth_user" {
+  description = "HTTP basic session login username for the Asset Register app (enforced by default)."
+  type        = string
+  default     = "admin"
+}
+
+variable "asset_register_auth_password" {
+  description = "Login password for Asset Register. Override in terraform.tfvars; change after first deploy. Avoid characters that break systemd Environment= lines ($, quotes)."
+  type        = string
+  sensitive   = true
+  default     = "ChangeThisPasswordImmediately1"
+}

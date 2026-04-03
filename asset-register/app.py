@@ -59,12 +59,24 @@ def _auth_user():
     return (os.environ.get("ASSET_REGISTER_AUTH_USER") or "").strip()
 
 
+def auth_explicitly_disabled():
+    """Local/dev only: set ASSET_REGISTER_AUTH_DISABLED=1 to skip login (not for production)."""
+    v = (os.environ.get("ASSET_REGISTER_AUTH_DISABLED") or "").strip().lower()
+    return v in ("1", "true", "yes", "on")
+
+
 def auth_configured():
+    """True when username and password (or password hash) are set in the environment."""
     if not _auth_user():
         return False
     if os.environ.get("ASSET_REGISTER_AUTH_PASSWORD_HASH"):
         return True
     return bool(os.environ.get("ASSET_REGISTER_AUTH_PASSWORD"))
+
+
+def auth_enforced():
+    """When True, all routes require login (unless credentials missing — then only /login)."""
+    return not auth_explicitly_disabled()
 
 
 def _password_ok(plain: str) -> bool:
@@ -92,17 +104,35 @@ def _safe_next(target: str):
 
 @app.context_processor
 def inject_auth():
-    return {"auth_enabled": auth_configured()}
+    return {"auth_enabled": auth_enforced() and auth_configured()}
 
 
 @app.before_request
 def require_login():
-    if not auth_configured():
+    if not auth_enforced():
         return None
     if request.endpoint in ("login", "static"):
         return None
     if request.path.startswith("/static/"):
         return None
+    if not auth_configured():
+        if request.path.startswith("/api/"):
+            return (
+                jsonify(
+                    {
+                        "error": (
+                            "Authentication required but server is not configured: "
+                            "set ASSET_REGISTER_AUTH_USER and ASSET_REGISTER_AUTH_PASSWORD "
+                            "(or ASSET_REGISTER_AUTH_PASSWORD_HASH). "
+                            "For local development only, set ASSET_REGISTER_AUTH_DISABLED=1."
+                        )
+                    }
+                ),
+                503,
+            )
+        if request.endpoint == "login":
+            return None
+        return redirect(url_for("login"))
     if session.get("auth_ok") is True:
         return None
     if request.path.startswith("/api/"):
@@ -112,8 +142,10 @@ def require_login():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    if not auth_configured():
+    if not auth_enforced():
         return redirect(url_for("index"))
+    if not auth_configured():
+        return render_template("login.html", error=None, next="", misconfigured=True)
     error = None
     next_url = request.args.get("next") or ""
     if request.method == "POST":
@@ -126,13 +158,13 @@ def login():
             session.permanent = True
             return redirect(_safe_next(next_url))
         error = "Invalid username or password."
-    return render_template("login.html", error=error, next=next_url)
+    return render_template("login.html", error=error, next=next_url, misconfigured=False)
 
 
 @app.route("/logout")
 def logout():
     session.clear()
-    if auth_configured():
+    if auth_enforced() and auth_configured():
         return redirect(url_for("login"))
     return redirect(url_for("index"))
 
