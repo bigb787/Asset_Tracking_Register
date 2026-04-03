@@ -1,6 +1,28 @@
 """Shared labels for Excel export (aligned with frontend COLUMN_LABELS)."""
 
+import re
+
 from database import TABLE_COLUMNS, TABLE_ORDER
+
+
+def _normalize_import_header(s) -> str:
+    return re.sub(r"\s+", " ", str(s).strip().lower())
+
+
+def column_for_excel_import_header(db_key: str, header_cell) -> str | None:
+    """Map an Excel header cell to a table column name, or None if unknown."""
+    if header_cell is None:
+        return None
+    h = _normalize_import_header(header_cell)
+    if not h:
+        return None
+    for col, lab in zip(TABLE_COLUMNS[db_key], header_labels_for_asset_table(db_key)):
+        if _normalize_import_header(lab) == h:
+            return col
+    for col in TABLE_COLUMNS[db_key]:
+        if _normalize_import_header(col) == h:
+            return col
+    return None
 
 COLUMN_LABELS = {
     "asset_type": "Asset Type",

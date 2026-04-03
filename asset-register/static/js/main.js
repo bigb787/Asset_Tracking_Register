@@ -328,11 +328,15 @@
     return escapeHtml(val);
   }
 
-  async function api(path, opts) {
-    const res = await fetch(path, {
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      ...opts,
-    });
+  async function api(path, opts = {}) {
+    const { headers: hdrIn, ...rest } = opts;
+    const isForm = rest.body instanceof FormData;
+    const headers = {
+      Accept: "application/json",
+      ...(isForm ? {} : { "Content-Type": "application/json" }),
+      ...(hdrIn || {}),
+    };
+    const res = await fetch(path, { ...rest, headers });
     const text = await res.text();
     let data = null;
     if (text) {
@@ -893,6 +897,37 @@
 
   $("#btn-back").addEventListener("click", showHome);
   $("#btn-add").addEventListener("click", () => openModalAdd());
+  const importFileInput = document.getElementById("import-excel-file");
+  document.getElementById("btn-import-excel")?.addEventListener("click", () => importFileInput?.click());
+  importFileInput?.addEventListener("change", async () => {
+    const file = importFileInput.files && importFileInput.files[0];
+    importFileInput.value = "";
+    if (!file || !currentTable) return;
+    const fd = new FormData();
+    fd.append("file", file);
+    try {
+      const data = await api(`/api/tables/${encodeURIComponent(currentTable)}/import`, {
+        method: "POST",
+        body: fd,
+      });
+      let msg = `Imported ${data.imported} row(s).`;
+      if (data.skipped_empty) msg += ` Skipped ${data.skipped_empty} empty row(s).`;
+      if (data.sheet_used) msg += `\nSheet used: ${data.sheet_used}`;
+      if (data.errors && data.errors.length) {
+        const sample = data.errors
+          .slice(0, 10)
+          .map((e) => `Row ${e.row}: ${e.error}`)
+          .join("\n");
+        msg += `\n\nErrors (${data.errors.length}):\n${sample}`;
+        if (data.errors.length > 10) msg += `\n… and ${data.errors.length - 10} more`;
+      }
+      await loadRows();
+      await loadHome();
+      alert(msg);
+    } catch (e) {
+      alert(e.message);
+    }
+  });
   $("#modal-close").addEventListener("click", closeModal);
   $("#modal-cancel").addEventListener("click", closeModal);
 

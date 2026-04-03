@@ -2,7 +2,8 @@ import io
 import json
 import os
 import re
-from datetime import datetime, timedelta
+from datetime import date, datetime, time, timedelta
+from decimal import Decimal
 from xml.sax.saxutils import escape
 from hmac import compare_digest
 from pathlib import Path
@@ -19,7 +20,7 @@ from flask import (
     session,
     url_for,
 )
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from reportlab.lib import colors
@@ -43,6 +44,7 @@ from export_common import (
     EXPORT_SHEET_TITLES,
     GATEPASS_COLUMN_ORDER,
     GATEPASS_LABELS,
+    column_for_excel_import_header,
     excel_value,
     header_labels_for_asset_table,
     summary_table_specs,
@@ -215,6 +217,43 @@ def _filter_payload(table: str, data: dict) -> dict:
     return out
 
 
+def _coerce_excel_import_cell(col: str, val):
+    if val is None:
+        return None
+    if isinstance(val, datetime):
+        return val.date().isoformat()
+    if isinstance(val, date):
+        return val.isoformat()
+    if isinstance(val, time):
+        return val.isoformat()
+    if isinstance(val, Decimal):
+        if col == "is_free":
+            return int(val != 0)
+        if val == val.to_integral():
+            return str(int(val))
+        return str(val)
+    if isinstance(val, float):
+        if col == "is_free":
+            return int(val != 0)
+        try:
+            iv = int(val)
+            if float(iv) == val:
+                return str(iv)
+        except (ValueError, OverflowError):
+            pass
+        return str(val)
+    if isinstance(val, int):
+        if col == "is_free":
+            return int(val != 0)
+        return str(val)
+    if isinstance(val, bool):
+        if col == "is_free":
+            return int(val)
+        return "Yes" if val else "No"
+    s = str(val).strip()
+    return s if s else None
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -308,6 +347,85 @@ def api_rows_delete(table_name, row_id):
         return "", 204
     finally:
         conn.close()
+
+
+@app.route("/api/tables/<table_name>/import", methods=["POST"])
+def api_rows_import_excel(table_name):
+    t = _validate_table(table_name)
+    f = request.files.get("file")
+    if f is None or f.filename is None or f.filename.strip() == "":
+        return jsonify({"error": "Missing file (use multipart field name 'file')"}), 400
+    data = f.read()
+    if not data:
+        return jsonify({"error": "Empty file"}), 400
+    try:
+        wb = load_workbook(io.BytesIO(data), data_only=True, read_only=True)
+    except Exception as ex:
+        return jsonify({"error": f"Invalid Excel file: {ex}"}), 400
+    try:
+        title = EXPORT_SHEET_TITLES.get(t)
+        if title and title in wb.sheetnames:
+            ws = wb[title]
+            sheet_used = title
+        else:
+            ws = wb[wb.sheetnames[0]]
+            sheet_used = ws.title
+        rows_iter = ws.iter_rows(values_only=True)
+        try:
+            header_row = next(rows_iter)
+        except StopIteration:
+            return jsonify({"error": "Worksheet is empty"}), 400
+        col_indices = []
+        for idx, cell in enumerate(header_row):
+            cname = column_for_excel_import_header(t, cell)
+            if cname:
+                col_indices.append((idx, cname))
+        if not col_indices:
+            return jsonify({"error": "No recognized column headers in the first row"}), 400
+
+        imported = 0
+        skipped_empty = 0
+        errors = []
+        conn = get_connection()
+        try:
+            for row_num, row in enumerate(rows_iter, start=2):
+                raw = {}
+                for idx, col_name in col_indices:
+                    v = row[idx] if row is not None and idx < len(row) else None
+                    coerced = _coerce_excel_import_cell(col_name, v)
+                    if coerced is not None:
+                        raw[col_name] = coerced
+                payload = _filter_payload(t, raw)
+                if not payload:
+                    skipped_empty += 1
+                    continue
+                cols = list(payload.keys())
+                placeholders = ", ".join("?" * len(cols))
+                col_sql = ", ".join(_qi(c) for c in cols)
+                values = [payload[c] for c in cols]
+                try:
+                    conn.execute(
+                        f"INSERT INTO {_qt(t)} ({col_sql}) VALUES ({placeholders})",
+                        values,
+                    )
+                    conn.commit()
+                    imported += 1
+                except Exception as ex:
+                    conn.rollback()
+                    errors.append({"row": row_num, "error": str(ex)})
+        finally:
+            conn.close()
+
+        return jsonify(
+            {
+                "imported": imported,
+                "skipped_empty": skipped_empty,
+                "errors": errors,
+                "sheet_used": sheet_used,
+            }
+        )
+    finally:
+        wb.close()
 
 
 # --- Excel export (openpyxl) ---

@@ -35,7 +35,11 @@
       <div class="register-toolbar">
         <button type="button" class="btn btn-ghost" id="btn-back">← All tables</button>
         <span class="breadcrumb" id="register-breadcrumb"></span>
-        <button type="button" class="btn btn-primary" id="btn-add">Add row</button>
+        <div class="register-toolbar-right">
+          <input type="file" id="import-excel-file" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden />
+          <button type="button" class="btn btn-ghost" id="btn-import-excel">Import Excel</button>
+          <button type="button" class="btn btn-primary" id="btn-add">Add row</button>
+        </div>
       </div>
       <div class="table-scroll" role="region" aria-label="Register data">
         <table class="data-table" id="data-table">
