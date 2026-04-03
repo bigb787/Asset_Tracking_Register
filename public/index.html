@@ -38,32 +38,32 @@
       </div>
     </header>
 
-    <!-- Screen 1: Workspace selector -->
+    <!-- Screen 1: Table picker -->
     <section id="homeScreen" class="screen">
-      <div class="screen-inner screen-inner--home">
-        <div class="home-topbar">
-          <div class="home-title">Asset workspaces</div>
-          <div class="home-actions">
-            <div class="search-home">
-              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.4;flex-shrink:0;"><circle cx="7" cy="7" r="4"/><path d="M11 11l2.5 2.5"/></svg>
-              <input id="wsSearch" placeholder="Search workspaces…" />
-            </div>
-            <button type="button" class="ghost-btn ws-new-workspace-btn" disabled title="Coming soon">New workspace</button>
+      <div class="screen-inner screen-inner--home table-picker-screen">
+        <header class="table-picker-header">
+          <div class="table-picker-head-text">
+            <h1 class="table-picker-title">Select a table</h1>
+            <p class="table-picker-sub">Choose a table to view its asset register.</p>
           </div>
+          <button type="button" class="primary-btn table-picker-new-btn" disabled title="Coming soon">+ New table</button>
+        </header>
+        <div class="search-home table-picker-search">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.4;flex-shrink:0;"><circle cx="7" cy="7" r="4"/><path d="M11 11l2.5 2.5"/></svg>
+          <input id="tableSearch" type="search" autocomplete="off" placeholder="Search tables…" />
         </div>
-        <div class="home-sub">Select a workspace to view and manage its asset register.</div>
-        <div class="grid" id="wsGrid"></div>
+        <div class="table-picker-list" id="tablePickerList" role="list"></div>
       </div>
     </section>
 
     <!-- Screen 2: Asset register table view -->
     <section id="regScreen" class="screen reg-screen hidden">
       <div class="reg-topbar">
-        <button id="ws-back-btn" class="back-btn" type="button">
+        <button id="table-back-btn" class="back-btn" type="button">
           <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 3L5 8l5 5"/></svg>
-          All workspaces
+          All tables
         </button>
-        <div class="breadcrumb">Workspaces › <span id="breadName">—</span></div>
+        <div class="breadcrumb">Tables › <span id="breadName">—</span></div>
       </div>
 
       <div class="reg-header">

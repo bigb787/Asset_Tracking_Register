@@ -324,7 +324,7 @@ let editingGatepassId = null;
 let currentTableSearch = '';
 let currentGatepassSearch = '';
 let laptopStatusFilter = 'all';
-let wsSearchDebounce = null;
+let tableSearchDebounce = null;
 
 function showHome() {
   $('#homeScreen').classList.remove('hidden');
@@ -336,7 +336,7 @@ function showRegister() {
   $('#regScreen').classList.remove('hidden');
 }
 
-function tableMetaForWorkspace(tableKey) {
+function tableMetaForPicker(tableKey) {
   if (tableKey === 'gatepasses') {
     return {
       key: 'gatepasses',
@@ -347,178 +347,135 @@ function tableMetaForWorkspace(tableKey) {
     };
   }
   const t = TABLES.find((x) => x.key === tableKey) || TABLES[0];
+  const slug = t.key.replace(/_/g, ' ');
   return {
     key: t.key,
     name: t.label,
-    loc: 'Asset register table',
+    loc: `Asset register · ${slug}`,
     iconBg: '#EAF3DE',
     iconColor: '#3B6D11',
   };
 }
 
-function wireWorkspaceGridNavigation() {
-  const grid = document.querySelector('#wsGrid');
-  if (!grid || grid.dataset.navWired === '1') return;
-  grid.dataset.navWired = '1';
-  grid.addEventListener('click', (ev) => {
-    const card = ev.target.closest('.ws-card');
-    if (!card) return;
-    const key = card.getAttribute('data-key');
+function wireTablePickerNavigation() {
+  const list = document.querySelector('#tablePickerList');
+  if (!list || list.dataset.navWired === '1') return;
+  list.dataset.navWired = '1';
+  list.addEventListener('click', (ev) => {
+    const row = ev.target.closest('.tbl-picker-row');
+    if (!row || !list.contains(row)) return;
+    const key = row.getAttribute('data-key');
     if (!key) return;
-    openWorkspace(key).catch((e) => {
+    openTableView(key).catch((e) => {
       console.error(e);
       alert(
         e && typeof e === 'object' && 'message' in e && e.message
           ? String(e.message)
-          : 'Could not open this workspace. Check that you are still signed in and try again.'
+          : 'Could not open this table. Check that you are still signed in and try again.'
       );
     });
   });
-  grid.addEventListener('keydown', (ev) => {
+  list.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Enter' && ev.key !== ' ') return;
-    const card = ev.target.closest('.ws-card');
-    if (!card || !grid.contains(card)) return;
+    const row = ev.target.closest('.tbl-picker-row');
+    if (!row || !list.contains(row)) return;
     ev.preventDefault();
-    const key = card.getAttribute('data-key');
+    const key = row.getAttribute('data-key');
     if (!key) return;
-    openWorkspace(key).catch((e) => {
+    openTableView(key).catch((e) => {
       console.error(e);
       alert(
         e && typeof e === 'object' && 'message' in e && e.message
           ? String(e.message)
-          : 'Could not open this workspace.'
+          : 'Could not open this table.'
       );
     });
   });
 }
 
-function renderWorkspaceGrid(query) {
+function renderTablePickerList(query) {
   const q = String(query || '').trim().toLowerCase();
   const items = [
-    ...TABLES.filter((t) => t.key !== 'gatepasses').map((t) => tableMetaForWorkspace(t.key)),
-    tableMetaForWorkspace('gatepasses'),
+    ...TABLES.filter((t) => t.key !== 'gatepasses').map((t) => tableMetaForPicker(t.key)),
+    tableMetaForPicker('gatepasses'),
   ].filter((w) => !q || w.name.toLowerCase().includes(q) || w.loc.toLowerCase().includes(q));
 
-  const grid = $('#wsGrid');
-  if (!grid) return;
-  wireWorkspaceGridNavigation();
-  grid.innerHTML = items
+  const list = $('#tablePickerList');
+  if (!list) return;
+  wireTablePickerNavigation();
+  list.innerHTML = items
     .map(
       (w) => `
-      <div class="ws-card" role="button" tabindex="0" data-key="${escapeHtml(w.key)}"
-        aria-label="Open ${escapeHtml(w.name)} workspace">
-        <div class="ws-card-top">
-          <div class="ws-icon" style="background:${escapeHtml(w.iconBg)};">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="${escapeHtml(w.iconColor)}">
-              <rect x="2" y="8" width="16" height="10" rx="1.5"></rect>
-              <path d="M1 8l9-6 9 6" fill="none" stroke="${escapeHtml(w.iconColor)}" stroke-width="1.5"></path>
-            </svg>
-          </div>
-          <div class="ws-arrow" aria-hidden="true">→</div>
+      <div class="tbl-picker-row" role="listitem" tabindex="0" data-key="${escapeHtml(w.key)}"
+        aria-label="Open ${escapeHtml(w.name)} table">
+        <span class="tbl-picker-dot tbl-picker-dot--pending" data-tbl-dot aria-hidden="true"></span>
+        <div class="tbl-picker-main">
+          <div class="tbl-picker-name">${escapeHtml(w.name)}</div>
+          <div class="tbl-picker-desc">${escapeHtml(w.loc)}</div>
         </div>
-        <div class="ws-name">${escapeHtml(w.name)}</div>
-        <div class="ws-loc">${escapeHtml(w.loc)}</div>
-        <div class="ws-stats">
-          <div class="ws-stat">
-            <div class="ws-stat-val" data-ws-stat="total">—</div>
-            <div class="ws-stat-lbl">Total</div>
-          </div>
-          <div class="ws-divider"></div>
-          <div class="ws-stat">
-            <div class="ws-stat-val" data-ws-stat="s1">—</div>
-            <div class="ws-stat-lbl" data-ws-lbl="s1">—</div>
-          </div>
-          <div class="ws-divider"></div>
-          <div class="ws-stat">
-            <div class="ws-stat-val" data-ws-stat="s2">—</div>
-            <div class="ws-stat-lbl" data-ws-lbl="s2">—</div>
-          </div>
-          <div class="ws-divider"></div>
-          <div class="ws-stat">
-            <div class="ws-stat-val" data-ws-stat="s3">—</div>
-            <div class="ws-stat-lbl" data-ws-lbl="s3">—</div>
-          </div>
-        </div>
-        <div class="ws-footer">
-          <span class="ws-alert">…</span>
-          <div class="ws-updated">Loading…</div>
-        </div>
+        <div class="tbl-picker-count" data-tbl-count>…</div>
+        <span class="tbl-picker-badge tbl-picker-badge--pending" data-tbl-badge>…</span>
       </div>`
     )
     .join('');
 }
 
-function formatWsSummaryNumber(v) {
-  if (v == null || Number.isNaN(v)) return '—';
-  return String(v);
-}
-
-async function hydrateWorkspaceSummaries() {
-  const cards = document.querySelectorAll('#wsGrid .ws-card[data-key]');
+async function hydrateTablePickerSummaries() {
+  const rows = document.querySelectorAll('#tablePickerList .tbl-picker-row[data-key]');
   await Promise.all(
-    Array.from(cards).map(async (card) => {
-      const key = card.getAttribute('data-key');
+    Array.from(rows).map(async (row) => {
+      const key = row.getAttribute('data-key');
       if (!key) return;
+      const countEl = row.querySelector('[data-tbl-count]');
+      const badgeEl = row.querySelector('[data-tbl-badge]');
+      const dotEl = row.querySelector('[data-tbl-dot]');
       try {
         const s = await fetchJSON(apiUrl(`/api/workspace/${encodeURIComponent(key)}/summary`));
-        const tEl = card.querySelector('[data-ws-stat="total"]');
-        const a1 = card.querySelector('[data-ws-stat="s1"]');
-        const a2 = card.querySelector('[data-ws-stat="s2"]');
-        const a3 = card.querySelector('[data-ws-stat="s3"]');
-        if (tEl) tEl.textContent = formatWsSummaryNumber(s.total);
-        if (a1) a1.textContent = formatWsSummaryNumber(s.s1);
-        if (a2) a2.textContent = formatWsSummaryNumber(s.s2);
-        if (a3) a3.textContent = formatWsSummaryNumber(s.s3);
-        const l1 = card.querySelector('[data-ws-lbl="s1"]');
-        const l2 = card.querySelector('[data-ws-lbl="s2"]');
-        const l3 = card.querySelector('[data-ws-lbl="s3"]');
-        if (l1 && s.lbl1) l1.textContent = s.lbl1;
-        if (l2 && s.lbl2) l2.textContent = s.lbl2;
-        if (l3 && s.lbl3) l3.textContent = s.lbl3;
-        const alertEl = card.querySelector('.ws-alert');
-        const updatedEl = card.querySelector('.ws-updated');
-        if (alertEl) {
+        const total = typeof s.total === 'number' && !Number.isNaN(s.total) ? s.total : null;
+        if (countEl) {
+          countEl.textContent =
+            total == null ? '—' : `${total} ${total === 1 ? 'asset' : 'assets'}`;
+        }
+        if (badgeEl) {
           if (s.alertCount > 0) {
-            alertEl.textContent = `${s.alertCount} need attention`;
-            alertEl.style.background = '#FCEBEB';
-            alertEl.style.color = '#A32D2D';
+            const n = s.alertCount;
+            badgeEl.textContent = `${n} alert${n === 1 ? '' : 's'}`;
+            badgeEl.className = 'tbl-picker-badge tbl-picker-badge--alert';
           } else {
-            alertEl.textContent = 'All clear';
-            alertEl.style.background = '#EAF3DE';
-            alertEl.style.color = '#3B6D11';
+            badgeEl.textContent = 'All clear';
+            badgeEl.className = 'tbl-picker-badge tbl-picker-badge--ok';
           }
         }
-        if (updatedEl) {
-          updatedEl.textContent = `Updated ${new Date().toLocaleTimeString(undefined, {
-            hour: '2-digit',
-            minute: '2-digit',
-          })}`;
+        if (dotEl) {
+          dotEl.classList.remove('tbl-picker-dot--pending', 'tbl-picker-dot--ok', 'tbl-picker-dot--alert');
+          dotEl.classList.add(s.alertCount > 0 ? 'tbl-picker-dot--alert' : 'tbl-picker-dot--ok');
         }
       } catch (_e) {
-        const alertEl = card.querySelector('.ws-alert');
-        const updatedEl = card.querySelector('.ws-updated');
-        if (alertEl) {
-          alertEl.textContent = 'Summary unavailable';
-          alertEl.style.background = '#f3f4f6';
-          alertEl.style.color = '#5b677a';
+        if (countEl) countEl.textContent = '—';
+        if (badgeEl) {
+          badgeEl.textContent = '—';
+          badgeEl.className = 'tbl-picker-badge tbl-picker-badge--muted';
         }
-        if (updatedEl) updatedEl.textContent = '';
+        if (dotEl) {
+          dotEl.classList.remove('tbl-picker-dot--pending', 'tbl-picker-dot--ok', 'tbl-picker-dot--alert');
+          dotEl.classList.add('tbl-picker-dot--muted');
+        }
       }
     })
   );
 }
 
-function scheduleWorkspaceGridRefresh() {
-  clearTimeout(wsSearchDebounce);
-  wsSearchDebounce = setTimeout(() => {
-    const q = String(document.querySelector('#wsSearch')?.value || '');
-    renderWorkspaceGrid(q);
-    hydrateWorkspaceSummaries().catch((e) => console.error(e));
+function scheduleTablePickerRefresh() {
+  clearTimeout(tableSearchDebounce);
+  tableSearchDebounce = setTimeout(() => {
+    const q = String(document.querySelector('#tableSearch')?.value || '');
+    renderTablePickerList(q);
+    hydrateTablePickerSummaries().catch((e) => console.error(e));
   }, 280);
 }
 
-async function openWorkspace(tableKey) {
-  const meta = tableMetaForWorkspace(tableKey);
+async function openTableView(tableKey) {
+  const meta = tableMetaForPicker(tableKey);
   $('#breadName').textContent = meta.name;
   $('#regTitle').textContent = meta.name;
   $('#regSub').textContent = meta.loc;
@@ -645,7 +602,7 @@ function renderTableSelector() {
 }
 
 function updateSectionSwitcher() {
-  // no-op in new UI (workspace cards drive navigation)
+  // no-op in new UI (table list drives navigation)
 }
 
 async function setCurrentTable(tableKey) {
@@ -988,8 +945,8 @@ async function performLogin() {
     if (data.authDisabled) serverAuthDisabled = true;
     showApp(data.user);
     showHome();
-    renderWorkspaceGrid(String(document.querySelector('#wsSearch')?.value || ''));
-    hydrateWorkspaceSummaries().catch((e) => console.error(e));
+    renderTablePickerList(String(document.querySelector('#tableSearch')?.value || ''));
+    hydrateTablePickerSummaries().catch((e) => console.error(e));
     if (serverAuthDisabled) $('#logout-btn')?.classList?.add('hidden');
     else $('#logout-btn')?.classList?.remove('hidden');
     const form = document.querySelector('#login-form');
@@ -1205,16 +1162,16 @@ async function onDeleteGatepass(ev) {
 async function bootstrap() {
   try {
   renderTableSelector();
-  $('#ws-back-btn')?.addEventListener('click', () => {
+  $('#table-back-btn')?.addEventListener('click', () => {
     showHome();
-    renderWorkspaceGrid(String(document.querySelector('#wsSearch')?.value || ''));
-    hydrateWorkspaceSummaries().catch((e) => console.error(e));
+    renderTablePickerList(String(document.querySelector('#tableSearch')?.value || ''));
+    hydrateTablePickerSummaries().catch((e) => console.error(e));
   });
-  $('#wsSearch')?.addEventListener('input', () => {
-    scheduleWorkspaceGridRefresh();
+  $('#tableSearch')?.addEventListener('input', () => {
+    scheduleTablePickerRefresh();
   });
-  renderWorkspaceGrid('');
-  hydrateWorkspaceSummaries().catch((e) => console.error(e));
+  renderTablePickerList('');
+  hydrateTablePickerSummaries().catch((e) => console.error(e));
   showHome();
   document.querySelectorAll('a.js-auth-download').forEach((a) => {
     const h = a.getAttribute('href');
@@ -1353,8 +1310,8 @@ async function bootstrap() {
   if (user) {
     showApp(user);
     showHome();
-    renderWorkspaceGrid(String(document.querySelector('#wsSearch')?.value || ''));
-    hydrateWorkspaceSummaries().catch((e) => console.error(e));
+    renderTablePickerList(String(document.querySelector('#tableSearch')?.value || ''));
+    hydrateTablePickerSummaries().catch((e) => console.error(e));
     if (serverAuthDisabled) {
       $('#logout-btn')?.classList?.add('hidden');
     } else {
