@@ -279,6 +279,7 @@
   }
 
   function showHome() {
+    closeModal();
     currentTable = null;
     $("#view-home").hidden = false;
     $("#view-register").hidden = true;
@@ -440,18 +441,38 @@
   }
 
   function openModalAdd() {
+    if (!currentTable || !TABLE_COLUMNS[currentTable]) {
+      alert("Open a table from the list first (e.g. Laptop), then use Add row.");
+      return;
+    }
     editRowId = null;
     $("#modal-title").textContent = "Add row";
     const cols = TABLE_COLUMNS[currentTable];
-    $("#modal-form").innerHTML = cols.map((c) => fieldHtml(c, "")).join("");
+    try {
+      $("#modal-form").innerHTML = cols.map((c) => fieldHtml(c, "")).join("");
+    } catch (e) {
+      console.error(e);
+      alert("Could not build the form. Check the console.");
+      return;
+    }
     $("#modal-overlay").hidden = false;
   }
 
   function openModalEdit(row) {
+    if (!currentTable || !TABLE_COLUMNS[currentTable]) {
+      alert("Table context is missing. Go back and open a table again.");
+      return;
+    }
     editRowId = row.id;
     $("#modal-title").textContent = "Edit row";
     const cols = TABLE_COLUMNS[currentTable];
-    $("#modal-form").innerHTML = cols.map((c) => fieldHtml(c, row[c])).join("");
+    try {
+      $("#modal-form").innerHTML = cols.map((c) => fieldHtml(c, row[c])).join("");
+    } catch (e) {
+      console.error(e);
+      alert("Could not build the form. Check the console.");
+      return;
+    }
     $("#modal-overlay").hidden = false;
   }
 
@@ -482,6 +503,10 @@
 
   $("#modal-form").addEventListener("submit", async (ev) => {
     ev.preventDefault();
+    if (!currentTable || !TABLE_COLUMNS[currentTable]) {
+      alert("No table is selected. Close this dialog and open a table from the home list.");
+      return;
+    }
     const payload = readFormPayload();
     try {
       if (editRowId == null) {
