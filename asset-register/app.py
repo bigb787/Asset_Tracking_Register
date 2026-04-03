@@ -22,6 +22,8 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import cm
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 from werkzeug.security import check_password_hash
 
@@ -412,22 +414,14 @@ def _pdf_gatepass_buffer(row: dict):
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
     w, h = A4
-    lm = 40
-    rm = w - 40
-    y = h - 36
-
-    c.setFont("Helvetica", 9)
-    c.drawCentredString(w / 2, y, "[Company Logo / Company Name]")
-    y -= 28
-
-    bar_h = 40
-    c.setFillColor(colors.HexColor("#185FA5"))
-    c.rect(lm, y - bar_h, rm - lm, bar_h, fill=1, stroke=0)
-    c.setFillColor(colors.white)
-    c.setFont("Helvetica-Bold", 18)
-    c.drawCentredString(w / 2, y - bar_h + 12, "GATE PASS")
-    c.setFillColor(colors.black)
-    y -= bar_h + 24
+    m = 2 * cm
+    x_left = m
+    x_right = w - m
+    y_top = h - m
+    y_bottom = m
+    cw = x_right - x_left
+    mid_x = x_left + cw / 2
+    blue = colors.HexColor("#185FA5")
 
     def fmt_date(s):
         if not s:
@@ -440,106 +434,168 @@ def _pdf_gatepass_buffer(row: dict):
             pass
         return str(s)
 
-    mid_x = w / 2 - 10
+    gpno = str(row.get("gatepass_no") or "")
+    box_pad = 0.5 * cm
+    box_w = max(
+        5.0 * cm,
+        stringWidth(gpno, "Helvetica-Bold", 11) + box_pad * 2,
+    )
+    box_h = 1.05 * cm
+    box_x1 = x_right
+    box_x0 = box_x1 - box_w
+    box_y1 = y_top - 0.35 * cm
+    box_y0 = box_y1 - box_h
 
-    c.setFont("Helvetica-Bold", 10)
-    c.drawString(lm, y, "Gatepass No:")
-    c.setFont("Helvetica", 10)
-    c.drawString(lm + 90, y, str(row.get("gatepass_no") or ""))
-    c.setFont("Helvetica-Bold", 10)
-    c.drawString(mid_x, y, "Date:")
-    c.setFont("Helvetica", 10)
-    c.drawString(mid_x + 50, y, fmt_date(row.get("gatepass_date")))
-    y -= 22
+    c.setStrokeColor(colors.black)
+    c.setLineWidth(1)
+    c.rect(box_x0, box_y0, box_w, box_h, fill=0, stroke=1)
+    c.setFillColor(colors.black)
+    c.setFont("Helvetica-Bold", 11)
+    tw_gp = stringWidth(gpno, "Helvetica-Bold", 11)
+    c.drawString(box_x0 + (box_w - tw_gp) / 2, box_y0 + (box_h - 11) / 2 - 1, gpno)
 
-    c.setFont("Helvetica-Bold", 10)
-    c.drawString(lm, y, "Department:")
-    c.setFont("Helvetica", 10)
-    c.drawString(lm + 90, y, str(row.get("department") or ""))
-    y -= 20
-
-    c.setFont("Helvetica-Bold", 10)
-    c.drawString(lm, y, "Requested By:")
-    c.setFont("Helvetica", 10)
-    c.drawString(lm + 90, y, str(row.get("requested_by") or ""))
-    c.setFont("Helvetica-Bold", 10)
-    c.drawString(mid_x, y, "Approved By:")
-    c.setFont("Helvetica", 10)
-    c.drawString(mid_x + 90, y, str(row.get("approved_by") or ""))
-    y -= 24
-
-    c.setFont("Helvetica-Bold", 9)
-    c.drawString(lm, y, "Purpose:")
-    y -= 14
     c.setFont("Helvetica", 9)
-    for line in textwrap.wrap(str(row.get("purpose") or ""), 90) or [""]:
-        c.drawString(lm, y, line)
-        y -= 12
-    y -= 8
+    c.setFillColor(colors.black)
+    c.drawString(x_left, box_y0 + (box_h - 9) / 2, "[Company Logo / Company Name]")
 
-    ty = y
-    c.rect(lm, ty - 52, rm - lm, 52)
-    c.line(lm + 220, ty, lm + 220, ty - 52)
-    c.line(lm + 360, ty, lm + 360, ty - 52)
-    c.setFont("Helvetica-Bold", 8)
-    c.drawString(lm + 4, ty - 14, "Asset Description")
-    c.drawString(lm + 224, ty - 14, "Serial No")
-    c.drawString(lm + 364, ty - 14, "Qty")
+    gap_below_top = 0.4 * cm
+    bar_h = max(1.15 * cm, 28)  # room for 24 pt + padding
+    bar_y1 = box_y0 - gap_below_top
+    bar_y0 = bar_y1 - bar_h
+    c.setFillColor(blue)
+    c.rect(x_left, bar_y0, cw, bar_h, fill=1, stroke=0)
+    title = "GATE PASS"
+    c.setFillColor(colors.white)
+    c.setFont("Helvetica-Bold", 24)
+    tw_t = stringWidth(title, "Helvetica-Bold", 24)
+    tx = x_left + (cw - tw_t) / 2
+    ty = bar_y0 + (bar_h - 24) / 2 + 5
+    c.drawString(tx, ty, title)
+    c.setFillColor(colors.black)
+
+    yy = bar_y0 - 0.55 * cm
+    lh = 0.5 * cm
+    vx = x_left + 2.9 * cm
+
+    def row_single(label, value):
+        nonlocal yy
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(x_left, yy, label)
+        c.setFont("Helvetica", 10)
+        c.drawString(vx, yy, str(value or ""))
+        yy -= lh
+
+    def row_pair(label1, val1, label2, val2):
+        nonlocal yy
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(x_left, yy, label1)
+        c.setFont("Helvetica", 10)
+        c.drawString(vx, yy, str(val1 or ""))
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(mid_x, yy, label2)
+        c.setFont("Helvetica", 10)
+        c.drawString(mid_x + 2.4 * cm, yy, str(val2 or ""))
+        yy -= lh
+
+    row_single("Date:", fmt_date(row.get("gatepass_date")))
+    row_single("Department:", row.get("department"))
+    row_pair(
+        "Requested By:",
+        row.get("requested_by"),
+        "Approved By:",
+        row.get("approved_by"),
+    )
+
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(x_left, yy, "Purpose:")
+    yy -= 0.35 * cm
+    c.setFont("Helvetica", 10)
+    wrap_w = max(20, int(cw / (6.5)))
+    for line in textwrap.wrap(str(row.get("purpose") or ""), width=wrap_w) or [""]:
+        c.drawString(x_left, yy, line)
+        yy -= 0.4 * cm
+    yy -= 0.15 * cm
+
+    # Asset table: full grid
+    row1_h = 0.62 * cm
+    row2_h = 0.95 * cm
+    w1 = 0.50 * cw
+    w2 = 0.30 * cw
+    w3 = cw - w1 - w2
+    tbl_top = yy
+    tbl_mid = tbl_top - row1_h
+    tbl_bot = tbl_mid - row2_h
+    x0, x1, x2, x3 = x_left, x_left + w1, x_left + w1 + w2, x_right
+
+    c.setStrokeColor(colors.black)
+    c.setLineWidth(0.75)
+    c.line(x0, tbl_top, x3, tbl_top)
+    c.line(x0, tbl_mid, x3, tbl_mid)
+    c.line(x0, tbl_bot, x3, tbl_bot)
+    c.line(x0, tbl_top, x0, tbl_bot)
+    c.line(x1, tbl_top, x1, tbl_bot)
+    c.line(x2, tbl_top, x2, tbl_bot)
+    c.line(x3, tbl_top, x3, tbl_bot)
+
+    header_mid_y = (tbl_top + tbl_mid) / 2 - 3
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(x0 + 0.15 * cm, header_mid_y, "Asset Description")
+    c.drawString(x1 + 0.12 * cm, header_mid_y, "Serial No")
+    c.drawString(x2 + 0.12 * cm, header_mid_y, "Qty")
+    c.setFont("Helvetica", 9)
+    data_mid_y = (tbl_mid + tbl_bot) / 2 - 3
+    desc_txt = str(row.get("asset_description") or "")
+    c.drawString(x0 + 0.15 * cm, data_mid_y, desc_txt[:95] + ("…" if len(desc_txt) > 95 else ""))
+    c.drawString(x1 + 0.12 * cm, data_mid_y, str(row.get("asset_serial_no") or ""))
+    c.drawString(x2 + 0.12 * cm, data_mid_y, str(row.get("quantity") or ""))
+    yy = tbl_bot - 0.45 * cm
+
+    row_single("Expected Return:", fmt_date(row.get("expected_return_date")))
+    row_single("Actual Return:", fmt_date(row.get("actual_return_date")))
+    row_pair(
+        "Gate Out Time:",
+        row.get("gate_out_time"),
+        "Gate In Time:",
+        row.get("gate_in_time"),
+    )
+
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(x_left, yy, "Remarks:")
+    yy -= 0.35 * cm
+    c.setFont("Helvetica", 10)
+    for line in textwrap.wrap(str(row.get("remarks") or ""), width=wrap_w) or [""]:
+        c.drawString(x_left, yy, line)
+        yy -= 0.4 * cm
+    yy -= 0.15 * cm
+
+    row_pair(
+        "Security Guard:",
+        row.get("security_guard"),
+        "Status:",
+        row.get("status"),
+    )
+
+    sig_line_w = 6 * cm
+    sig_gap_above_footer = 1.35 * cm
+    label_off = 0.32 * cm
+    sig_y = y_bottom + sig_gap_above_footer + 0.55 * cm
+    c.setLineWidth(0.9)
+    c.line(x_left, sig_y, x_left + sig_line_w, sig_y)
+    c.line(x_right - sig_line_w, sig_y, x_right, sig_y)
+    c.setFont("Helvetica", 9)
+    c.drawCentredString(x_left + sig_line_w / 2, sig_y - label_off, "Requested By (Signature)")
+    c.drawCentredString(x_right - sig_line_w / 2, sig_y - label_off, "Approved By (Signature)")
+
+    ts = datetime.now().strftime("%d-%b-%Y %H:%M:%S")
     c.setFont("Helvetica", 8)
-    desc = str(row.get("asset_description") or "")
-    c.drawString(lm + 4, ty - 32, desc[:80])
-    c.drawString(lm + 224, ty - 32, str(row.get("asset_serial_no") or ""))
-    c.drawString(lm + 364, ty - 32, str(row.get("quantity") or ""))
-    y = ty - 52 - 14
-
-    c.setFont("Helvetica-Bold", 9)
-    c.drawString(lm, y, "Expected Return:")
-    c.setFont("Helvetica", 9)
-    c.drawString(lm + 100, y, fmt_date(row.get("expected_return_date")))
-    y -= 16
-    c.setFont("Helvetica-Bold", 9)
-    c.drawString(lm, y, "Actual Return:")
-    c.setFont("Helvetica", 9)
-    c.drawString(lm + 100, y, fmt_date(row.get("actual_return_date")))
-    y -= 16
-    c.setFont("Helvetica-Bold", 9)
-    c.drawString(lm, y, "Gate Out Time:")
-    c.setFont("Helvetica", 9)
-    c.drawString(lm + 100, y, str(row.get("gate_out_time") or ""))
-    c.setFont("Helvetica-Bold", 9)
-    c.drawString(mid_x, y, "Gate In Time:")
-    c.setFont("Helvetica", 9)
-    c.drawString(mid_x + 90, y, str(row.get("gate_in_time") or ""))
-    y -= 20
-
-    c.setFont("Helvetica-Bold", 9)
-    c.drawString(lm, y, "Remarks:")
-    y -= 12
-    c.setFont("Helvetica", 9)
-    for line in textwrap.wrap(str(row.get("remarks") or ""), 90) or [""]:
-        c.drawString(lm, y, line)
-        y -= 11
-    y -= 8
-
-    c.setFont("Helvetica-Bold", 9)
-    c.drawString(lm, y, "Security Guard:")
-    c.setFont("Helvetica", 9)
-    c.drawString(lm + 100, y, str(row.get("security_guard") or ""))
-    c.setFont("Helvetica-Bold", 9)
-    c.drawString(mid_x, y, "Status:")
-    c.setFont("Helvetica", 9)
-    c.drawString(mid_x + 50, y, str(row.get("status") or ""))
-    y -= 36
-
-    sig_y = 130
-    c.line(lm, sig_y, lm + 200, sig_y)
-    c.line(rm - 200, sig_y, rm, sig_y)
-    c.setFont("Helvetica", 8)
-    c.drawString(lm, sig_y - 14, "Requested By (Signature)")
-    c.drawString(rm - 200, sig_y - 14, "Approved By (Signature)")
-
-    c.setFont("Helvetica-Oblique", 8)
-    c.drawString(lm, 36, f"Generated on {datetime.now().strftime('%d-%b-%Y %H:%M')}")
+    c.setFillColor(colors.HexColor("#444444"))
+    c.drawCentredString(
+        w / 2,
+        y_bottom + 0.45 * cm,
+        "This is a system generated document",
+    )
+    c.drawCentredString(w / 2, y_bottom + 0.2 * cm, ts)
+    c.setFillColor(colors.black)
 
     c.showPage()
     c.save()
