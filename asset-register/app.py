@@ -2,6 +2,7 @@ import io
 import json
 import os
 import re
+import sqlite3
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from xml.sax.saxutils import escape
@@ -33,12 +34,23 @@ from werkzeug.security import check_password_hash
 
 from database import (
     ALLOWED_TABLES,
+    BUILTIN_REGISTER_LABELS,
     GATEPASS_MUTABLE_FIELDS,
     TABLE_COLUMNS,
     TABLE_ORDER,
+    all_asset_register_keys_in_order,
     allocate_next_gatepass_no,
+    asset_register_column_names,
+    generate_create_register_table_sql,
     get_connection,
+    get_extra_register_table_row,
+    is_known_asset_register_table,
+    list_extra_register_table_rows,
     migrate,
+    register_extra_table_exists,
+    resolve_template_table_for_register,
+    validate_new_register_table_key,
+    normalize_excel_sheet_title,
 )
 from export_common import (
     EXPORT_SHEET_TITLES,
@@ -47,7 +59,6 @@ from export_common import (
     column_for_excel_import_header,
     excel_value,
     header_labels_for_asset_table,
-    summary_table_specs,
 )
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
@@ -172,9 +183,79 @@ def logout():
 
 
 def _validate_table(name: str) -> str:
-    if name not in ALLOWED_TABLES:
+    conn = get_connection()
+    try:
+        if is_known_asset_register_table(conn, name):
+            return name
+    finally:
+        conn.close()
+    abort(404)
+
+
+def _summary_register_specs(conn):
+    rows = []
+    for k in TABLE_ORDER:
+        rows.append((EXPORT_SHEET_TITLES[k], k))
+    for r in list_extra_register_table_rows(conn):
+        rows.append((r["display_label"], r["table_key"]))
+    rows.append((EXPORT_SHEET_TITLES["gatepass"], "gatepass"))
+    return rows
+
+
+def _asset_register_columns_and_headers(conn, db_key: str):
+    if db_key in TABLE_COLUMNS:
+        cols = TABLE_COLUMNS[db_key]
+        headers = header_labels_for_asset_table(db_key)
+        return cols, headers
+    tpl = resolve_template_table_for_register(conn, db_key)
+    if tpl is None:
         abort(404)
+    cols = TABLE_COLUMNS[tpl]
+    headers = header_labels_for_asset_table(tpl)
+    return cols, headers
+
+
+def _excel_sheet_title_for_register(conn, db_key: str) -> str | None:
+    if db_key in EXPORT_SHEET_TITLES:
+        return EXPORT_SHEET_TITLES[db_key]
+    row = get_extra_register_table_row(conn, db_key)
+    return row["excel_sheet_title"] if row else None
+
+
+def _excel_sheet_title_available(conn, title: str) -> bool:
+    tl = (title or "").strip().lower()
+    for k in TABLE_ORDER:
+        if EXPORT_SHEET_TITLES[k].lower() == tl:
+            return False
+    if EXPORT_SHEET_TITLES["gatepass"].lower() == tl:
+        return False
+    row = conn.execute(
+        "SELECT table_key FROM register_extra_tables WHERE lower(excel_sheet_title) = ?",
+        (tl,),
+    ).fetchone()
+    return row is None
+
+
+def _next_unique_workbook_sheet_name(used: set[str], base: str) -> str:
+    base = (base or "Sheet")[:31]
+    name = base
+    n = 2
+    while name in used or not name:
+        suffix = f" ({n})"
+        name = (base[: max(1, 31 - len(suffix))] + suffix).strip()
+        n += 1
+    used.add(name)
     return name
+
+
+def _slug_register_key_from_label(label: str) -> str:
+    s = re.sub(r"[^a-z0-9_]+", "_", label.lower().strip())
+    s = re.sub(r"_+", "_", s).strip("_")
+    if not s:
+        return "register"
+    if s[0].isdigit():
+        s = "t_" + s
+    return s[:48]
 
 
 def _qi(ident: str) -> str:
@@ -202,8 +283,7 @@ def _row_to_dict(row):
     return {k: row[k] for k in row.keys()}
 
 
-def _filter_payload(table: str, data: dict) -> dict:
-    allowed = set(TABLE_COLUMNS[table])
+def _filter_payload_with_allowed(data: dict, allowed: set) -> dict:
     out = {}
     for key, val in data.items():
         if key not in allowed:
@@ -215,6 +295,11 @@ def _filter_payload(table: str, data: dict) -> dict:
         else:
             out[key] = val
     return out
+
+
+def _filter_payload_for_table(conn, table: str, data: dict) -> dict:
+    allowed = set(asset_register_column_names(conn, table))
+    return _filter_payload_with_allowed(data, allowed)
 
 
 def _coerce_excel_import_cell(col: str, val):
@@ -267,10 +352,84 @@ def api_tables_list():
         for t in TABLE_ORDER:
             cur = conn.execute(f"SELECT COUNT(*) AS c FROM {_qt(t)}")
             n = cur.fetchone()["c"]
-            result.append({"name": t, "row_count": n})
+            result.append(
+                {
+                    "name": t,
+                    "row_count": n,
+                    "label": BUILTIN_REGISTER_LABELS.get(t, t),
+                    "columns": TABLE_COLUMNS[t],
+                    "custom": False,
+                }
+            )
+        for r in list_extra_register_table_rows(conn):
+            cur = conn.execute(f"SELECT COUNT(*) AS c FROM {_qt(r['table_key'])}")
+            n = cur.fetchone()["c"]
+            result.append(
+                {
+                    "name": r["table_key"],
+                    "row_count": n,
+                    "label": r["display_label"],
+                    "columns": TABLE_COLUMNS[r["template_table"]],
+                    "custom": True,
+                    "template_table": r["template_table"],
+                }
+            )
         gp = conn.execute("SELECT COUNT(*) AS c FROM gatepass").fetchone()["c"]
-        result.append({"name": "gatepass", "row_count": gp})
+        result.append(
+            {"name": "gatepass", "row_count": gp, "label": "Gatepass", "custom": False}
+        )
         return jsonify(result)
+    finally:
+        conn.close()
+
+
+@app.route("/api/tables", methods=["POST"])
+def api_tables_create_register():
+    data = request.get_json(silent=True) or {}
+    label = (data.get("label") or "").strip()
+    if not label:
+        return jsonify({"error": "label is required"}), 400
+    raw_key = (data.get("key") or "").strip().lower()
+    key = raw_key if raw_key else _slug_register_key_from_label(label)
+    ok, err = validate_new_register_table_key(key)
+    if not ok:
+        return jsonify({"error": err}), 400
+    template = (data.get("template_table") or "laptops").strip()
+    if template not in ALLOWED_TABLES:
+        return jsonify({"error": "Invalid template_table"}), 400
+    sheet_raw = (data.get("sheet_title") or label or key).strip()
+    sheet_title = normalize_excel_sheet_title(sheet_raw, label or key)
+    conn = get_connection()
+    try:
+        if register_extra_table_exists(conn, key):
+            return jsonify({"error": "A table with this key already exists."}), 400
+        if not _excel_sheet_title_available(conn, sheet_title):
+            return jsonify({"error": "This Excel sheet name is already used."}), 400
+        mx = conn.execute(
+            "SELECT COALESCE(MAX(sort_order), 0) AS m FROM register_extra_tables"
+        ).fetchone()
+        sort_order = int(mx["m"]) + 1
+        conn.execute(
+            "INSERT INTO register_extra_tables (table_key, display_label, excel_sheet_title, template_table, sort_order) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (key, label, sheet_title, template, sort_order),
+        )
+        conn.execute(generate_create_register_table_sql(key, template))
+        conn.commit()
+        return (
+            jsonify(
+                {
+                    "name": key,
+                    "label": label,
+                    "sheet_title": sheet_title,
+                    "template_table": template,
+                }
+            ),
+            201,
+        )
+    except sqlite3.IntegrityError:
+        conn.rollback()
+        return jsonify({"error": "Could not create table (duplicate name?)."}), 400
     finally:
         conn.close()
 
@@ -291,15 +450,15 @@ def api_rows_list(table_name):
 def api_rows_create(table_name):
     t = _validate_table(table_name)
     data = request.get_json(silent=True) or {}
-    payload = _filter_payload(t, data)
-    if not payload:
-        return jsonify({"error": "No valid fields"}), 400
-    cols = list(payload.keys())
-    placeholders = ", ".join("?" * len(cols))
-    col_sql = ", ".join(_qi(c) for c in cols)
-    values = [payload[c] for c in cols]
     conn = get_connection()
     try:
+        payload = _filter_payload_for_table(conn, t, data)
+        if not payload:
+            return jsonify({"error": "No valid fields"}), 400
+        cols = list(payload.keys())
+        placeholders = ", ".join("?" * len(cols))
+        col_sql = ", ".join(_qi(c) for c in cols)
+        values = [payload[c] for c in cols]
         cur = conn.execute(
             f"INSERT INTO {_qt(t)} ({col_sql}) VALUES ({placeholders})",
             values,
@@ -317,11 +476,11 @@ def api_rows_create(table_name):
 def api_rows_update(table_name, row_id):
     t = _validate_table(table_name)
     data = request.get_json(silent=True) or {}
-    payload = _filter_payload(t, data)
-    if not payload:
-        return jsonify({"error": "No valid fields"}), 400
     conn = get_connection()
     try:
+        payload = _filter_payload_for_table(conn, t, data)
+        if not payload:
+            return jsonify({"error": "No valid fields"}), 400
         cur = conn.execute(f"SELECT id FROM {_qt(t)} WHERE id = ?", (row_id,))
         if cur.fetchone() is None:
             abort(404)
@@ -358,36 +517,38 @@ def api_rows_import_excel(table_name):
     data = f.read()
     if not data:
         return jsonify({"error": "Empty file"}), 400
+    wb = None
     try:
         wb = load_workbook(io.BytesIO(data), data_only=True, read_only=True)
     except Exception as ex:
         return jsonify({"error": f"Invalid Excel file: {ex}"}), 400
+    conn = get_connection()
     try:
-        title = EXPORT_SHEET_TITLES.get(t)
-        if title and title in wb.sheetnames:
-            ws = wb[title]
-            sheet_used = title
-        else:
-            ws = wb[wb.sheetnames[0]]
-            sheet_used = ws.title
-        rows_iter = ws.iter_rows(values_only=True)
         try:
-            header_row = next(rows_iter)
-        except StopIteration:
-            return jsonify({"error": "Worksheet is empty"}), 400
-        col_indices = []
-        for idx, cell in enumerate(header_row):
-            cname = column_for_excel_import_header(t, cell)
-            if cname:
-                col_indices.append((idx, cname))
-        if not col_indices:
-            return jsonify({"error": "No recognized column headers in the first row"}), 400
+            expected = _excel_sheet_title_for_register(conn, t)
+            if expected and expected in wb.sheetnames:
+                ws = wb[expected]
+                sheet_used = expected
+            else:
+                ws = wb[wb.sheetnames[0]]
+                sheet_used = ws.title
+            rows_iter = ws.iter_rows(values_only=True)
+            try:
+                header_row = next(rows_iter)
+            except StopIteration:
+                return jsonify({"error": "Worksheet is empty"}), 400
+            cols, hdr_labels = _asset_register_columns_and_headers(conn, t)
+            col_indices = []
+            for idx, cell in enumerate(header_row):
+                cname = column_for_excel_import_header(cell, cols, hdr_labels)
+                if cname:
+                    col_indices.append((idx, cname))
+            if not col_indices:
+                return jsonify({"error": "No recognized column headers in the first row"}), 400
 
-        imported = 0
-        skipped_empty = 0
-        errors = []
-        conn = get_connection()
-        try:
+            imported = 0
+            skipped_empty = 0
+            errors = []
             for row_num, row in enumerate(rows_iter, start=2):
                 raw = {}
                 for idx, col_name in col_indices:
@@ -395,14 +556,14 @@ def api_rows_import_excel(table_name):
                     coerced = _coerce_excel_import_cell(col_name, v)
                     if coerced is not None:
                         raw[col_name] = coerced
-                payload = _filter_payload(t, raw)
+                payload = _filter_payload_for_table(conn, t, raw)
                 if not payload:
                     skipped_empty += 1
                     continue
-                cols = list(payload.keys())
-                placeholders = ", ".join("?" * len(cols))
-                col_sql = ", ".join(_qi(c) for c in cols)
-                values = [payload[c] for c in cols]
+                cols_ins = list(payload.keys())
+                placeholders = ", ".join("?" * len(cols_ins))
+                col_sql = ", ".join(_qi(c) for c in cols_ins)
+                values = [payload[c] for c in cols_ins]
                 try:
                     conn.execute(
                         f"INSERT INTO {_qt(t)} ({col_sql}) VALUES ({placeholders})",
@@ -413,19 +574,20 @@ def api_rows_import_excel(table_name):
                 except Exception as ex:
                     conn.rollback()
                     errors.append({"row": row_num, "error": str(ex)})
+
+            return jsonify(
+                {
+                    "imported": imported,
+                    "skipped_empty": skipped_empty,
+                    "errors": errors,
+                    "sheet_used": sheet_used,
+                }
+            )
         finally:
             conn.close()
-
-        return jsonify(
-            {
-                "imported": imported,
-                "skipped_empty": skipped_empty,
-                "errors": errors,
-                "sheet_used": sheet_used,
-            }
-        )
     finally:
-        wb.close()
+        if wb is not None:
+            wb.close()
 
 
 # --- Excel export (openpyxl) ---
@@ -476,7 +638,7 @@ def _last_updated_for_table(conn, db_key: str):
 def _write_summary_sheet(ws, conn):
     ws.append(["Table Name", "Total Rows", "Last Updated"])
     _style_header_row(ws, 1)
-    for display_name, db_key in summary_table_specs():
+    for display_name, db_key in _summary_register_specs(conn):
         if db_key == "gatepass":
             cnt = conn.execute("SELECT COUNT(*) AS c FROM gatepass").fetchone()["c"]
         else:
@@ -487,8 +649,7 @@ def _write_summary_sheet(ws, conn):
 
 
 def _write_asset_sheet(ws, conn, db_key: str):
-    cols = TABLE_COLUMNS[db_key]
-    headers = header_labels_for_asset_table(db_key)
+    cols, headers = _asset_register_columns_and_headers(conn, db_key)
     ws.append(headers)
     _style_header_row(ws, 1)
     cur = conn.execute(f"SELECT * FROM {_qt(db_key)} ORDER BY id ASC")
@@ -514,26 +675,35 @@ def _write_gatepass_data_sheet(ws, conn):
 def export_all():
     conn = get_connection()
     try:
-        wb = Workbook()
-        wb.remove(wb.active)
-        ws_sum = wb.create_sheet("Summary", 0)
-        _write_summary_sheet(ws_sum, conn)
-        for db_key in TABLE_ORDER:
-            title = EXPORT_SHEET_TITLES[db_key]
-            ws = wb.create_sheet(title)
-            _write_asset_sheet(ws, conn, db_key)
-        ws_g = wb.create_sheet(EXPORT_SHEET_TITLES["gatepass"])
-        _write_gatepass_data_sheet(ws_g, conn)
-        bio = io.BytesIO()
-        wb.save(bio)
-        bio.seek(0)
-        fname = f"asset_register_export_{datetime.now().date().isoformat()}.xlsx"
-        return send_file(
-            bio,
-            as_attachment=True,
-            download_name=fname,
-            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
+        try:
+            wb = Workbook()
+            wb.remove(wb.active)
+            used_names: set[str] = set()
+            sum_title = _next_unique_workbook_sheet_name(used_names, "Summary")
+            ws_sum = wb.create_sheet(sum_title, 0)
+            _write_summary_sheet(ws_sum, conn)
+            for db_key in all_asset_register_keys_in_order(conn):
+                base = _excel_sheet_title_for_register(conn, db_key) or db_key
+                title = _next_unique_workbook_sheet_name(used_names, base)
+                ws = wb.create_sheet(title)
+                _write_asset_sheet(ws, conn, db_key)
+            gp_base = EXPORT_SHEET_TITLES["gatepass"]
+            gp_title = _next_unique_workbook_sheet_name(used_names, gp_base)
+            ws_g = wb.create_sheet(gp_title)
+            _write_gatepass_data_sheet(ws_g, conn)
+            bio = io.BytesIO()
+            wb.save(bio)
+            bio.seek(0)
+            fname = f"asset_register_export_{datetime.now().date().isoformat()}.xlsx"
+            return send_file(
+                bio,
+                as_attachment=True,
+                download_name=fname,
+                mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        except Exception as ex:
+            app.logger.exception("export_all failed")
+            return jsonify({"error": str(ex)}), 500
     finally:
         conn.close()
 

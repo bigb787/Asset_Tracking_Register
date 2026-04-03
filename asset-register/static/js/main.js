@@ -242,7 +242,8 @@
   };
 
   function columnLabel(tableKey, col) {
-    const o = COLUMN_LABEL_OVERRIDES_BY_TABLE[tableKey];
+    const tmpl = templateKeyByTable[tableKey] || tableKey;
+    const o = COLUMN_LABEL_OVERRIDES_BY_TABLE[tmpl];
     if (o && o[col]) return o[col];
     return COLUMN_LABELS[col] || col;
   }
@@ -276,10 +277,21 @@
 
   const metaByKey = Object.fromEntries(TABLE_META.map((m) => [m.key, m]));
 
+  const templateKeyByTable = {};
+  const labelByTableName = {};
+  const REGISTER_TEMPLATE_KEYS = TABLE_META.filter((m) => m.key !== "gatepass").map((m) => m.key);
+  const CUSTOM_TABLE_DOT_COLOR = "#5b6b7c";
+
+  function tableDotColor(key) {
+    const m = metaByKey[key];
+    return m ? m.color : CUSTOM_TABLE_DOT_COLOR;
+  }
+
   let currentTable = null;
   let editRowId = null;
   let gatepassModalMode = false;
   let editGatepassId = null;
+  let newTableModalMode = false;
 
   const $ = (sel) => document.querySelector(sel);
 
@@ -357,16 +369,66 @@
     return data;
   }
 
-  function exportAll() {
+  function filenameFromContentDisposition(cd) {
+    if (!cd) return null;
+    const m =
+      /filename\*=UTF-8''([^;]+)|filename="([^"]+)"|filename=([^;\s]+)/i.exec(cd);
+    if (!m) return null;
+    return decodeURIComponent(String(m[1] || m[2] || m[3]).trim().replace(/["']$/g, ""));
+  }
+
+  async function downloadBinary(path, defaultFilename, opts = {}) {
+    const res = await fetch(path, {
+      method: opts.method || "GET",
+      credentials: "same-origin",
+      headers: opts.headers || { Accept: "*/*" },
+      body: opts.body,
+    });
+    if (res.status === 401) {
+      window.location.href = "/login?next=" + encodeURIComponent(window.location.pathname);
+      throw new Error("Unauthorized");
+    }
+    if (!res.ok) {
+      const text = await res.text();
+      let msg = text;
+      try {
+        const j = JSON.parse(text);
+        if (j.error) msg = j.error;
+      } catch (_) {}
+      throw new Error(typeof msg === "string" ? msg : "Download failed");
+    }
+    const blob = await res.blob();
+    const fname =
+      filenameFromContentDisposition(res.headers.get("Content-Disposition")) || defaultFilename;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  async function exportAll() {
     const btn = document.getElementById("exportAllBtn");
     if (!btn) return;
     btn.textContent = "Exporting...";
     btn.disabled = true;
-    window.location.href = "/api/export/all";
-    setTimeout(() => {
+    try {
+      const def = `asset_register_export_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      await downloadBinary("/api/export/all", def, {
+        headers: {
+          Accept:
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*",
+        },
+      });
+    } catch (e) {
+      alert(e.message || "Export failed");
+    } finally {
       btn.textContent = "Export All Tables";
       btn.disabled = false;
-    }, 3000);
+    }
   }
 
   function showHome() {
@@ -386,15 +448,25 @@
     list.innerHTML = '<li class="empty-state">Loading…</li>';
     try {
       const counts = await api("/api/tables");
-      const countMap = Object.fromEntries(counts.map((c) => [c.name, c.row_count]));
       list.innerHTML = "";
-      for (const m of TABLE_META) {
-        const n = countMap[m.key] ?? 0;
+      for (const row of counts) {
+        const key = row.name;
+        labelByTableName[key] = row.label || metaByKey[key]?.label || key;
+        if (row.columns && row.columns.length && key !== "gatepass") {
+          TABLE_COLUMNS[key] = row.columns;
+        }
+        if (row.custom && row.template_table) {
+          templateKeyByTable[key] = row.template_table;
+        } else if (key !== "gatepass") {
+          delete templateKeyByTable[key];
+        }
+        const n = row.row_count ?? 0;
+        const label = labelByTableName[key];
         const li = document.createElement("li");
         li.innerHTML = `
-          <button type="button" data-table="${escapeHtml(m.key)}">
-            <span class="dot" style="background:${escapeHtml(m.color)}"></span>
-            <span class="name">${escapeHtml(m.label)}</span>
+          <button type="button" data-table="${escapeHtml(key)}">
+            <span class="dot" style="background:${escapeHtml(tableDotColor(key))}"></span>
+            <span class="name">${escapeHtml(label)}</span>
             <span class="count">${n} rows</span>
             <span class="chev" aria-hidden="true">›</span>
           </button>`;
@@ -785,6 +857,7 @@
     editRowId = null;
     gatepassModalMode = false;
     editGatepassId = null;
+    newTableModalMode = false;
     const panel = document.getElementById("modal-panel");
     if (panel) panel.classList.remove("modal-wide");
     const f = $("#modal-form");
@@ -807,11 +880,10 @@
           <option value="No" ${noSel ? "selected" : ""}>No</option>
         </select></div>`;
     }
+    const tmpl = templateKeyByTable[currentTable] || currentTable;
     if (
       col === "asset_status" &&
-      (currentTable === "laptops" ||
-        currentTable === "desktops" ||
-        currentTable === "monitors")
+      (tmpl === "laptops" || tmpl === "desktops" || tmpl === "monitors")
     ) {
       const opts = ASSET_STATUS_OPTIONS.map(
         (o) =>
@@ -963,12 +1035,23 @@
   });
 
   const exportBtn = document.getElementById("exportAllBtn");
-  if (exportBtn) exportBtn.addEventListener("click", exportAll);
+  if (exportBtn) exportBtn.addEventListener("click", () => exportAll());
+
+  document.getElementById("btn-new-register-table")?.addEventListener("click", openNewTableModal);
 
   document.getElementById("btn-gatepass-back").addEventListener("click", showHome);
   document.getElementById("btn-gatepass-add").addEventListener("click", openGatepassModalAdd);
-  document.getElementById("btn-gatepass-export").addEventListener("click", () => {
-    window.location.href = "/api/gatepass/export";
+  document.getElementById("btn-gatepass-export").addEventListener("click", async () => {
+    try {
+      const def = `gatepass_export_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      await downloadBinary("/api/gatepass/export", def, {
+        headers: {
+          Accept: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,*/*",
+        },
+      });
+    } catch (e) {
+      alert(e.message);
+    }
   });
 
   showHome();

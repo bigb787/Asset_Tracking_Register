@@ -23,6 +23,32 @@ TABLE_ORDER = [
 
 ALLOWED_TABLES = frozenset(TABLE_ORDER)
 
+RESERVED_SQL_TABLE_NAMES = frozenset(
+    {
+        "gatepass",
+        "register_extra_tables",
+        "gatepass_counter",
+        "sqlite_sequence",
+        "sqlite_stat1",
+        "assets",
+        "workspaces",
+        "example",
+    }
+)
+
+REGISTER_EXTRA_TABLES_DDL = """
+CREATE TABLE IF NOT EXISTS register_extra_tables (
+  table_key TEXT PRIMARY KEY,
+  display_label TEXT NOT NULL,
+  excel_sheet_title TEXT NOT NULL,
+  template_table TEXT NOT NULL DEFAULT 'laptops',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_register_extra_sheet_title
+  ON register_extra_tables (excel_sheet_title);
+"""
+
 TABLE_COLUMNS = {
     "laptops": [
         "asset_type",
@@ -511,6 +537,117 @@ CREATE TABLE IF NOT EXISTS gatepass_counter (
 """
 
 
+def _sql_quote_ident(ident: str) -> str:
+    return '"' + ident.replace('"', '""') + '"'
+
+
+def generate_create_register_table_sql(table_key: str, template_key: str) -> str:
+    """Physical SQLite table matching an existing asset template (same columns as template)."""
+    if template_key not in ALLOWED_TABLES:
+        raise ValueError("Invalid template table")
+    cols = TABLE_COLUMNS[template_key]
+    parts = ["id INTEGER PRIMARY KEY AUTOINCREMENT"]
+    for c in cols:
+        if c == "is_free":
+            parts.append(f"{_sql_quote_ident(c)} INTEGER DEFAULT 0")
+        else:
+            parts.append(f"{_sql_quote_ident(c)} TEXT")
+    parts.append("created_at DATETIME DEFAULT CURRENT_TIMESTAMP")
+    body = ", ".join(parts)
+    return f"CREATE TABLE {_sql_quote_ident(table_key)} ({body})"
+
+
+def validate_new_register_table_key(key: str) -> tuple[bool, str]:
+    if not key or len(key) > 48:
+        return False, "Key must be 1–48 characters."
+    if not re.match(r"^[a-z][a-z0-9_]*$", key):
+        return False, "Use lowercase letters, digits, and underscores; start with a letter."
+    if key in ALLOWED_TABLES or key in RESERVED_SQL_TABLE_NAMES:
+        return False, "This table key is reserved or already exists."
+    return True, ""
+
+
+def normalize_excel_sheet_title(title: str, fallback: str = "Sheet") -> str:
+    s = (title or fallback).strip() or fallback
+    s = s[:31]
+    for bad in r"[]:*?/\\":
+        s = s.replace(bad, "_")
+    s = s.strip() or fallback
+    return s[:31]
+
+
+def _ensure_register_extra_tables(conn):
+    conn.executescript(REGISTER_EXTRA_TABLES_DDL)
+
+
+def list_extra_register_table_rows(conn):
+    return conn.execute(
+        "SELECT table_key, display_label, excel_sheet_title, template_table, sort_order "
+        "FROM register_extra_tables ORDER BY sort_order ASC, created_at ASC"
+    ).fetchall()
+
+
+def list_extra_register_table_keys(conn):
+    return [r["table_key"] for r in list_extra_register_table_rows(conn)]
+
+
+def get_extra_register_table_row(conn, table_key: str):
+    return conn.execute(
+        "SELECT * FROM register_extra_tables WHERE table_key = ?",
+        (table_key,),
+    ).fetchone()
+
+
+def is_known_asset_register_table(conn, name: str) -> bool:
+    if name in ALLOWED_TABLES:
+        return True
+    return get_extra_register_table_row(conn, name) is not None
+
+
+def resolve_template_table_for_register(conn, name: str) -> str | None:
+    if name in ALLOWED_TABLES:
+        return name
+    row = get_extra_register_table_row(conn, name)
+    if row is None:
+        return None
+    tpl = row["template_table"]
+    if tpl not in ALLOWED_TABLES:
+        return None
+    return tpl
+
+
+def asset_register_column_names(conn, name: str) -> list[str]:
+    tpl = resolve_template_table_for_register(conn, name)
+    if tpl is None:
+        raise KeyError(name)
+    return list(TABLE_COLUMNS[tpl])
+
+
+def all_asset_register_keys_in_order(conn) -> list[str]:
+    keys = list(TABLE_ORDER)
+    keys.extend(list_extra_register_table_keys(conn))
+    return keys
+
+
+def register_extra_table_exists(conn, table_key: str) -> bool:
+    return get_extra_register_table_row(conn, table_key) is not None
+
+
+BUILTIN_REGISTER_LABELS = {
+    "laptops": "Laptop",
+    "desktops": "Desktop",
+    "monitors": "Monitor",
+    "networking": "Networking",
+    "cloud_assets": "Cloud assets",
+    "infodesk_applications": "Infodesk applications",
+    "third_party_software": "Third party software",
+    "ups": "UPS",
+    "mobile_phones": "Mobile phones",
+    "scanners_others": "Scanners & others",
+    "admin": "Admin",
+}
+
+
 def get_connection():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
@@ -523,6 +660,7 @@ def migrate():
     conn = get_connection()
     try:
         conn.executescript(_MIGRATION_SQL)
+        _ensure_register_extra_tables(conn)
         _ensure_gatepass_columns(conn)
         _ensure_gatepass_counter(conn)
         _ensure_asset_table_columns(conn)

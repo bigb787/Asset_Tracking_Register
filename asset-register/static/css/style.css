@@ -160,6 +160,17 @@ body {
   margin: 0;
 }
 
+.home-toolbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-home-action {
+  flex-shrink: 0;
+}
+
 .btn-export-all {
   display: flex;
   align-items: center;

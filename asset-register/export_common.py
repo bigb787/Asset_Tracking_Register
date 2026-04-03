@@ -9,17 +9,19 @@ def _normalize_import_header(s) -> str:
     return re.sub(r"\s+", " ", str(s).strip().lower())
 
 
-def column_for_excel_import_header(db_key: str, header_cell) -> str | None:
-    """Map an Excel header cell to a table column name, or None if unknown."""
+def column_for_excel_import_header(
+    header_cell, columns: list[str], header_labels: list[str]
+) -> str | None:
+    """Map an Excel header cell to a column name using the same labels as export."""
     if header_cell is None:
         return None
     h = _normalize_import_header(header_cell)
     if not h:
         return None
-    for col, lab in zip(TABLE_COLUMNS[db_key], header_labels_for_asset_table(db_key)):
+    for col, lab in zip(columns, header_labels):
         if _normalize_import_header(lab) == h:
             return col
-    for col in TABLE_COLUMNS[db_key]:
+    for col in columns:
         if _normalize_import_header(col) == h:
             return col
     return None
