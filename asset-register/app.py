@@ -741,6 +741,54 @@ def _pdf_gatepass_buffer(row: dict):
     return buf
 
 
+def _gatepass_s3_bucket_and_prefix():
+    bucket = (
+        os.environ.get("GATEPASS_S3_BUCKET") or os.environ.get("BACKUP_BUCKET") or ""
+    ).strip()
+    prefix = (os.environ.get("GATEPASS_S3_PREFIX") or "GatePass").strip().strip("/")
+    return bucket, prefix
+
+
+def _safe_s3_filename_part(text: str) -> str:
+    t = re.sub(r"[^A-Za-z0-9._-]+", "_", str(text or "")).strip("_")
+    return t or "unknown"
+
+
+def _save_gatepass_pdf_to_s3(row_dict: dict) -> None:
+    """Upload gatepass PDF under GatePass/ when S3 bucket env is set (EC2 + IAM)."""
+    bucket, prefix = _gatepass_s3_bucket_and_prefix()
+    if not bucket:
+        return
+    try:
+        import boto3
+        from botocore.exceptions import ClientError
+    except ImportError:
+        app.logger.warning("boto3 not installed; skipping gatepass S3 upload")
+        return
+    try:
+        d = dict(row_dict)
+        pdf_buf = _pdf_gatepass_buffer(d)
+        body = pdf_buf.getvalue()
+        rid = d.get("id") or 0
+        gno = _safe_s3_filename_part(d.get("gatepass_no"))
+        key = f"{prefix}/{rid}_{gno}.pdf"
+        boto3.client("s3").put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=body,
+            ContentType="application/pdf",
+        )
+        app.logger.info("Gatepass PDF stored at s3://%s/%s", bucket, key)
+    except ClientError:
+        app.logger.exception(
+            "S3 PutObject failed for gatepass id=%s", row_dict.get("id")
+        )
+    except Exception:
+        app.logger.exception(
+            "Gatepass S3 upload error for id=%s", row_dict.get("id")
+        )
+
+
 @app.route("/api/gatepass", methods=["GET"])
 def gatepass_list():
     conn = get_connection()
@@ -766,7 +814,9 @@ def gatepass_create():
         conn.commit()
         rid = cur.lastrowid
         row = conn.execute("SELECT * FROM gatepass WHERE id = ?", (rid,)).fetchone()
-        return jsonify(_row_to_dict(row)), 201
+        d = _row_to_dict(row)
+        _save_gatepass_pdf_to_s3(d)
+        return jsonify(d), 201
     finally:
         conn.close()
 
@@ -786,7 +836,9 @@ def gatepass_update(row_id):
         conn.execute(f"UPDATE gatepass SET {sets} WHERE id = ?", vals)
         conn.commit()
         row = conn.execute("SELECT * FROM gatepass WHERE id = ?", (row_id,)).fetchone()
-        return jsonify(_row_to_dict(row))
+        d = _row_to_dict(row)
+        _save_gatepass_pdf_to_s3(d)
+        return jsonify(d)
     finally:
         conn.close()
 

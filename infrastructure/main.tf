@@ -82,6 +82,8 @@ User=root
 WorkingDirectory=$SUBAPP
 Environment=DATABASE_PATH=$DB_PATH
 Environment=SECRET_KEY=change-me-in-production
+Environment=GATEPASS_S3_BUCKET=${local.backup_bucket}
+Environment=GATEPASS_S3_PREFIX=GatePass
 EnvironmentFile=-$SUBAPP/.env
 ExecStart=$SUBAPP/.venv/bin/gunicorn -w 2 -b 127.0.0.1:$APP_PORT app:app
 Restart=always
@@ -225,7 +227,10 @@ resource "aws_iam_role_policy" "ec2_backup_s3_policy" {
       {
         Effect = "Allow"
         Action = ["s3:PutObject", "s3:AbortMultipartUpload"]
-        Resource = "arn:aws:s3:::${local.backup_bucket}/sqlite/*"
+        Resource = [
+          "arn:aws:s3:::${local.backup_bucket}/sqlite/*",
+          "arn:aws:s3:::${local.backup_bucket}/GatePass/*"
+        ]
       },
       {
         Effect = "Allow"
