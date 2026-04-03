@@ -49,14 +49,10 @@ APP_PORT="${var.app_port}"
 BACKUP_BUCKET="${local.backup_bucket}"
 
 apt-get update
-apt-get install -y ca-certificates curl gnupg git nginx build-essential python3 sqlite3 gzip unzip
+apt-get install -y ca-certificates curl gnupg git nginx build-essential python3 python3-venv sqlite3 gzip unzip
 
 # Ensure SSM is running (usually preinstalled, but safe to restart).
 systemctl restart amazon-ssm-agent || true
-
-curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-apt-get install -y nodejs
-npm install -g pm2
 
 curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "/tmp/awscliv2.zip"
 unzip -o /tmp/awscliv2.zip -d /tmp
@@ -66,19 +62,39 @@ rm -rf "$APP_DIR"
 git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" "$APP_DIR" || git clone --depth 1 "$REPO_URL" "$APP_DIR"
 
 cd "$APP_DIR"
+mkdir -p "$APP_DIR/data"
+SUBAPP="$APP_DIR/asset-register"
 
-# Start the Node app if this repo contains a runnable Node project.
-if [ -f package.json ]; then
-  npm install --omit=dev || npm install
+# Flask app in asset-register/ (Gunicorn + systemd). Nginx proxies to APP_PORT.
+if [ -f "$SUBAPP/app.py" ]; then
+  python3 -m venv "$SUBAPP/.venv"
+  "$SUBAPP/.venv/bin/pip" install --upgrade pip
+  "$SUBAPP/.venv/bin/pip" install -r "$SUBAPP/requirements.txt"
+  DB_PATH="$APP_DIR/data/asset_register.sqlite"
+  cat > /etc/systemd/system/asset-register.service <<SYSTEMD
+[Unit]
+Description=Asset Register (Gunicorn)
+After=network.target
 
-  pm2 delete asset-register || true
-  PORT="$APP_PORT" pm2 start npm --name asset-register -- start
-  pm2 save
+[Service]
+Type=simple
+User=root
+WorkingDirectory=$SUBAPP
+Environment=DATABASE_PATH=$DB_PATH
+Environment=SECRET_KEY=change-me-in-production
+EnvironmentFile=-$SUBAPP/.env
+ExecStart=$SUBAPP/.venv/bin/gunicorn -w 2 -b 127.0.0.1:$APP_PORT app:app
+Restart=always
+RestartSec=3
 
-  # Ensure PM2 restarts on reboot
-  env PATH="$PATH:/usr/bin" pm2 startup systemd -u root --hp /root || true
+[Install]
+WantedBy=multi-user.target
+SYSTEMD
+  systemctl daemon-reload
+  systemctl enable asset-register
+  systemctl restart asset-register
 else
-  echo "package.json not found in $REPO_URL; app will not start." | tee /var/log/asset-register-userdata.log
+  echo "asset-register/app.py not found in $REPO_URL; app will not start." | tee /var/log/asset-register-userdata.log
 fi
 
 # Expose the app on port 80 (reverse proxy to Node on APP_PORT)
@@ -104,9 +120,7 @@ rm -f /etc/nginx/sites-enabled/default || true
 systemctl enable nginx
 systemctl restart nginx
 
-node --version
-npm --version
-pm2 --version
+python3 --version
 
 # Daily DB backup to S3
 cat > /usr/local/bin/backup-asset-db.sh <<'BKP'
@@ -136,7 +150,7 @@ EOF
 
 resource "aws_security_group" "app" {
   name        = "asset-register-app-sg"
-  description = "SSH, HTTP, and Node.js (3000) for Asset Register EC2"
+  description = "SSH, HTTP, and app (default 3000) for Asset Register EC2"
   vpc_id      = data.aws_vpc.default.id
 
   ingress {
@@ -156,7 +170,7 @@ resource "aws_security_group" "app" {
   }
 
   ingress {
-    description = "Node.js app"
+    description = "App (Gunicorn)"
     from_port   = 3000
     to_port     = 3000
     protocol    = "tcp"

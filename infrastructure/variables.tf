@@ -23,7 +23,7 @@ variable "allowed_ssh_cidr" {
 }
 
 variable "allowed_app_cidr" {
-  description = "CIDR allowed to reach HTTP (80) and the Node app (3000)."
+  description = "CIDR allowed to reach HTTP (80) and the app port (default 3000)."
   type        = string
   default     = "0.0.0.0/0"
 }
@@ -35,7 +35,7 @@ variable "associate_public_ip" {
 }
 
 variable "app_repo_url" {
-  description = "GitHub repository URL for the Node.js app."
+  description = "Git repository URL (clone target on EC2 under /opt/asset-register)."
   type        = string
   default     = "https://github.com/bigb787/Asset_Tracking_Register.git"
 }
@@ -47,7 +47,7 @@ variable "app_repo_branch" {
 }
 
 variable "app_port" {
-  description = "Port where the Node.js app listens."
+  description = "Port where Gunicorn listens (nginx reverse proxies here)."
   type        = number
   default     = 3000
 }

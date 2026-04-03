@@ -1,6 +1,4 @@
-# ISO 27001 Asset Management Compliance Rules
-- Every 'Update' or 'Delete' action on the `assets` table MUST automatically trigger an entry in the `audit_trail` table.
-- The `audit_trail` must capture: `previous_value`, `new_value`, `action_type`, and `timestamp`.
-- Use `Better-SQLite3` for all database operations to ensure synchronous consistency.
-- All Asset Tags must be unique and validated before insertion.
-- When generating Excel exports, ensure the columns match ISO 27001 inventory requirements (ID, Owner, Status, Location).
+# Asset Register (Flask)
+- App code lives under `asset-register/`; SQLite via `database.py` (`sqlite3` / file path from `DATABASE_PATH`).
+- Production DB path on EC2: `/opt/asset-register/data/asset_register.sqlite` (matches Terraform backup cron).
+- ISO / audit expectations (when you add an `assets` model): validate unique asset tags; log update/delete to an `audit_trail` with previous/new value, action, and timestamp.
