@@ -1,4 +1,5 @@
 import os
+import re
 import sqlite3
 from pathlib import Path
 
@@ -308,6 +309,57 @@ def _ensure_asset_table_columns(conn):
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
 
 
+def _gatepass_slip_max_in_table(conn) -> int:
+    """Largest numeric suffix from GP-<n> (or legacy GP-*-...-<n>) in gatepass rows."""
+    max_n = 0
+    for row in conn.execute("SELECT gatepass_no FROM gatepass"):
+        s = str(row["gatepass_no"] or "")
+        m = re.match(r"(?i)^GP-(\d+)$", s)
+        if m:
+            max_n = max(max_n, int(m.group(1)))
+            continue
+        parts = s.split("-")
+        if len(parts) >= 2 and parts[0].upper() == "GP":
+            try:
+                max_n = max(max_n, int(parts[-1]))
+            except ValueError:
+                pass
+    return max_n
+
+
+def _ensure_gatepass_counter(conn):
+    """Single-row sequence aligned with physical slips (GP-442, GP-443, ...)."""
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS gatepass_counter (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            last_num INTEGER NOT NULL DEFAULT 0
+        )
+        """
+    )
+    row = conn.execute("SELECT last_num FROM gatepass_counter WHERE id = 1").fetchone()
+    slip_max = _gatepass_slip_max_in_table(conn)
+    if row is None:
+        conn.execute(
+            "INSERT INTO gatepass_counter (id, last_num) VALUES (1, ?)",
+            (slip_max,),
+        )
+    elif slip_max > int(row["last_num"]):
+        conn.execute(
+            "UPDATE gatepass_counter SET last_num = ? WHERE id = 1",
+            (slip_max,),
+        )
+
+
+def allocate_next_gatepass_no(conn) -> str:
+    """Increment and return next slip id (e.g. GP-443). Use inside BEGIN IMMEDIATE."""
+    conn.execute("UPDATE gatepass_counter SET last_num = last_num + 1 WHERE id = 1")
+    n = conn.execute("SELECT last_num FROM gatepass_counter WHERE id = 1").fetchone()[
+        "last_num"
+    ]
+    return f"GP-{n}"
+
+
 def _run_asset_row_migrations(conn):
     for sql in (
         """UPDATE monitors SET assigned_to = "user" WHERE """
@@ -451,6 +503,11 @@ CREATE TABLE IF NOT EXISTS gatepass (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS gatepass_counter (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  last_num INTEGER NOT NULL DEFAULT 0
+);
 """
 
 
@@ -467,6 +524,7 @@ def migrate():
     try:
         conn.executescript(_MIGRATION_SQL)
         _ensure_gatepass_columns(conn)
+        _ensure_gatepass_counter(conn)
         _ensure_asset_table_columns(conn)
         _run_asset_row_migrations(conn)
         conn.commit()

@@ -35,6 +35,7 @@ from database import (
     GATEPASS_MUTABLE_FIELDS,
     TABLE_COLUMNS,
     TABLE_ORDER,
+    allocate_next_gatepass_no,
     get_connection,
     migrate,
 )
@@ -404,23 +405,6 @@ def _filter_gatepass_payload(data: dict) -> dict:
             continue
         out[k] = None if v == "" else v
     return out
-
-
-def _next_gatepass_no(conn):
-    max_n = 0
-    for row in conn.execute("SELECT gatepass_no FROM gatepass"):
-        s = str(row["gatepass_no"] or "")
-        m = re.match(r"^GP-(\d+)$", s)
-        if m:
-            max_n = max(max_n, int(m.group(1)))
-            continue
-        parts = s.split("-")
-        if len(parts) >= 2 and parts[0] == "GP":
-            try:
-                max_n = max(max_n, int(parts[-1]))
-            except ValueError:
-                pass
-    return f"GP-{max_n + 1:03d}"
 
 
 def _fmt_gatepass_pdf_date(s):
@@ -805,14 +789,19 @@ def gatepass_create():
     payload = _filter_gatepass_payload(data)
     conn = get_connection()
     try:
-        gno = _next_gatepass_no(conn)
-        cols = ["gatepass_no"] + list(payload.keys())
-        values = [gno] + [payload[k] for k in payload.keys()]
-        ph = ", ".join("?" * len(values))
-        colsql = ", ".join(_qi(c) for c in cols)
-        cur = conn.execute(f"INSERT INTO gatepass ({colsql}) VALUES ({ph})", values)
-        conn.commit()
-        rid = cur.lastrowid
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            gno = allocate_next_gatepass_no(conn)
+            cols = ["gatepass_no"] + list(payload.keys())
+            values = [gno] + [payload[k] for k in payload.keys()]
+            ph = ", ".join("?" * len(values))
+            colsql = ", ".join(_qi(c) for c in cols)
+            cur = conn.execute(f"INSERT INTO gatepass ({colsql}) VALUES ({ph})", values)
+            conn.commit()
+            rid = cur.lastrowid
+        except Exception:
+            conn.rollback()
+            raise
         row = conn.execute("SELECT * FROM gatepass WHERE id = ?", (rid,)).fetchone()
         d = _row_to_dict(row)
         _save_gatepass_pdf_to_s3(d)

@@ -509,7 +509,7 @@
 
     const roBlock = isEdit
       ? `<div class="field field-full field-readonly"><label>Gatepass No</label><input type="text" name="gatepass_no" readonly value="${v("gatepass_no")}"></div>`
-      : `<div class="field field-full field-readonly"><label>Gatepass No</label><input type="text" readonly value="" placeholder="Auto-generated on save (GP-001)"></div>`;
+      : `<div class="field field-full field-readonly"><label>Gatepass No</label><input type="text" readonly value="" placeholder="Auto-generated on save (GP-442, GP-443, …)"></div>`;
 
     const passType = String(r.pass_type || "Returnable / Outward");
     const passSel = (val, label) =>
