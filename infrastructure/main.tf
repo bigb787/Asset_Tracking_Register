@@ -152,7 +152,7 @@ EOF
 
 resource "aws_security_group" "app" {
   name        = "asset-register-app-sg"
-  description = "SSH, HTTP, and app (default 3000) for Asset Register EC2"
+  description = "SSH, HTTP, and Node.js (3000) for Asset Register EC2"
   vpc_id      = data.aws_vpc.default.id
 
   ingress {
@@ -172,7 +172,7 @@ resource "aws_security_group" "app" {
   }
 
   ingress {
-    description = "App (Gunicorn)"
+    description = "Node.js app"
     from_port   = 3000
     to_port     = 3000
     protocol    = "tcp"
