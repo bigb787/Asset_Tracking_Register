@@ -38,7 +38,7 @@ jobs:
               --document-name "AWS-RunShellScript" \
               --comment "Deploy Flask asset-register" \
               --parameters 'commands=[
-                "set -euo pipefail",
+                "set -eu",
                 "cd /opt/asset-register",
                 "git fetch --all",
                 "git checkout main || git checkout -B main origin/main",
