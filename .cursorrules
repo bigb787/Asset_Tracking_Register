@@ -1,4 +1,4 @@
 # Asset Register (Flask)
-- App code lives under `asset-register/`; SQLite via `database.py` (`sqlite3` / file path from `DATABASE_PATH`).
-- Production DB path on EC2: `/opt/asset-register/data/asset_register.sqlite` (matches Terraform backup cron).
-- ISO / audit expectations (when you add an `assets` model): validate unique asset tags; log update/delete to an `audit_trail` with previous/new value, action, and timestamp.
+- App code under `asset-register/`; 11 SQLite tables (see `database.py` TABLE_ORDER). Use the word **table** (not workspace) in UI and APIs.
+- Production DB: `DATABASE_PATH` / `/opt/asset-register/data/asset_register.sqlite` (Terraform backups).
+- API routes under `/api/tables/...`; validate `table_name` against `ALLOWED_TABLES`; use parameterized queries and quoted identifiers where needed.

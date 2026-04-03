@@ -3,16 +3,51 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Asset Register</title>
+  <title>Asset Register — Select a Table</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
   <header class="site-header">
-    <h1>Asset Register</h1>
+    <div class="header-inner">
+      <h1 id="page-title">Asset Register — Select a Table</h1>
+      <p class="header-sub" id="header-sub" hidden>Tables</p>
+    </div>
   </header>
   <main class="site-main">
-    <p class="lead">Flask + SQLite scaffold is ready. Add features under <code>app.py</code> and <code>database.py</code>.</p>
+    <section id="view-home" class="view">
+      <p class="view-intro">Choose a table to open its register.</p>
+      <ul id="table-list" class="table-picker" aria-label="Tables"></ul>
+    </section>
+
+    <section id="view-register" class="view" hidden>
+      <div class="register-toolbar">
+        <button type="button" class="btn btn-ghost" id="btn-back">← All tables</button>
+        <span class="breadcrumb" id="register-breadcrumb"></span>
+        <button type="button" class="btn btn-primary" id="btn-add">Add row</button>
+      </div>
+      <div class="table-scroll" role="region" aria-label="Register data">
+        <table class="data-table" id="data-table">
+          <thead id="data-thead"></thead>
+          <tbody id="data-tbody"></tbody>
+        </table>
+      </div>
+    </section>
   </main>
+
+  <div id="modal-overlay" class="modal-overlay" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <header class="modal-header">
+        <h2 id="modal-title">Add row</h2>
+        <button type="button" class="btn-icon" id="modal-close" aria-label="Close">×</button>
+      </header>
+      <form id="modal-form" class="modal-form"></form>
+      <footer class="modal-footer">
+        <button type="button" class="btn btn-ghost" id="modal-cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary" form="modal-form" id="modal-save">Save</button>
+      </footer>
+    </div>
+  </div>
+
   <script src="{{ url_for('static', filename='js/main.js') }}" defer></script>
 </body>
 </html>

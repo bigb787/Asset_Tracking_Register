@@ -28,7 +28,16 @@ git pull --rebase || true
 
 mkdir -p "$(dirname "$DB_PATH")"
 
+export DATABASE_PATH="$DB_PATH"
+for f in "$REPO_ROOT/data/assets.db" "$APP_DIR/data/assets.db"; do
+  if [ -f "$f" ]; then
+    rm -f "$f"
+  fi
+done
+
 cd "$APP_DIR"
+python3 database.py
+
 python3 -m venv .venv
 # shellcheck source=/dev/null
 source .venv/bin/activate
