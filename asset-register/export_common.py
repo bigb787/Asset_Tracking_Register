@@ -4,7 +4,7 @@ from database import TABLE_COLUMNS, TABLE_ORDER
 
 COLUMN_LABELS = {
     "asset_type": "Asset Type",
-    "asset_manufacturer": "Manufacturer",
+    "asset_manufacturer": "Asset Manufacturer",
     "service_tag": "Service Tag",
     "model": "Model",
     "pn": "P/N",
@@ -27,7 +27,7 @@ COLUMN_LABELS = {
     "mouse": "Mouse",
     "headphone": "Headphone",
     "usb_extender": "USB Extender",
-    "contains_pii": "Contains PII",
+    "contains_pii": "Contains PII (Yes/No)",
     "is_free": "Free?",
     "asset": "Asset",
     "asset_value": "Asset Value",
@@ -35,11 +35,33 @@ COLUMN_LABELS = {
     "asset_region": "Asset Region",
     "sn": "S/N",
     "configuration": "Configuration",
-    "device_id": "Device ID",
+    "device_id": "Device Id",
+    "asset_id": "Asset Id",
+    "mac_id": "MAC ID",
+    "description": "Description",
+    "cve_alert_setup": "CVE alert Setup",
+    "billing_api": "Billing API",
     "invoice_no": "Invoice No",
     "user": "User",
     "id": "ID",
     "created_at": "Created At",
+}
+
+
+# Per-table header text where it differs from COLUMN_LABELS (e.g. cloud PII wording).
+COLUMN_LABEL_OVERRIDES_BY_TABLE = {
+    "cloud_assets": {
+        "contains_pii": "Contains PII data?",
+        "date_added_updated": "Date Added/ Updated",
+    },
+    "infodesk_applications": {
+        "contains_pii": "Contains PII data?",
+        "date_added_updated": "Date Added/ Updated",
+    },
+    "third_party_software": {
+        "contains_pii": "Contains PII data?",
+        "date_added_updated": "Date Added/ Updated",
+    },
 }
 
 # DB key → exact Excel sheet name (11 asset tables + gatepass last in export_all)
@@ -126,7 +148,8 @@ def summary_table_specs():
 
 def header_labels_for_asset_table(db_key: str):
     cols = TABLE_COLUMNS[db_key]
-    return [COLUMN_LABELS.get(c, c) for c in cols]
+    ovr = COLUMN_LABEL_OVERRIDES_BY_TABLE.get(db_key, {})
+    return [ovr.get(c, COLUMN_LABELS.get(c, c)) for c in cols]
 
 
 def excel_value(col: str, val):

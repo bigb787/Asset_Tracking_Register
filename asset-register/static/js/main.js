@@ -33,45 +33,60 @@
     desktops: [
       "asset_type",
       "asset_manufacturer",
-      "processor",
+      "service_tag",
+      "model",
+      "pn",
       "asset_owner",
+      "assigned_to",
+      "asset_status",
+      "last_owner",
       "dept",
       "location",
-      "model",
-      "service_tag",
+      "asset_health",
       "warranty",
       "install_date",
+      "date_added_updated",
+      "processor",
       "os",
       "supt_vendor",
       "configuration",
       "contains_pii",
-      "date_added_updated",
       "is_free",
     ],
     monitors: [
       "asset_type",
-      "user",
+      "asset_manufacturer",
+      "service_tag",
       "model",
+      "pn",
+      "asset_owner",
+      "assigned_to",
+      "asset_status",
+      "dept",
+      "location",
+      "asset_health",
       "warranty",
       "install_date",
-      "supt_vendor",
-      "location",
-      "dept",
-      "asset_owner",
-      "contains_pii",
       "date_added_updated",
+      "supt_vendor",
+      "contains_pii",
       "is_free",
     ],
     networking: [
       "asset_type",
-      "user",
+      "asset_id",
+      "mac_id",
+      "asset_owner",
+      "location",
       "model",
       "sn",
+      "pn",
       "warranty",
+      "install_date",
+      "os",
       "supt_vendor",
-      "location",
       "dept",
-      "asset_owner",
+      "configuration",
       "contains_pii",
       "date_added_updated",
       "is_free",
@@ -90,6 +105,7 @@
     infodesk_applications: [
       "asset",
       "asset_type",
+      "asset_value",
       "asset_owner",
       "asset_location",
       "contains_pii",
@@ -104,27 +120,32 @@
       "asset_location",
       "contains_pii",
       "date_added_updated",
+      "cve_alert_setup",
+      "billing_api",
       "is_free",
     ],
     ups: [
       "asset_type",
       "device_id",
+      "location",
       "model",
       "warranty",
       "install_date",
       "supt_vendor",
-      "location",
       "dept",
       "asset_owner",
+      "contains_pii",
       "date_added_updated",
       "is_free",
     ],
     mobile_phones: [
       "asset_type",
+      "device_id",
+      "location",
       "model",
+      "pn",
       "warranty",
       "supt_vendor",
-      "location",
       "dept",
       "asset_owner",
       "contains_pii",
@@ -133,12 +154,15 @@
     ],
     scanners_others: [
       "asset_type",
+      "device_id",
+      "location",
       "model",
-      "sn",
+      "service_tag",
+      "pn",
       "warranty",
       "supt_vendor",
-      "location",
       "dept",
+      "description",
       "asset_owner",
       "contains_pii",
       "date_added_updated",
@@ -146,11 +170,11 @@
     ],
     admin: [
       "asset_type",
+      "location",
       "invoice_no",
       "warranty",
       "install_date",
       "supt_vendor",
-      "location",
       "dept",
       "asset_owner",
       "contains_pii",
@@ -161,7 +185,7 @@
 
   const COLUMN_LABELS = {
     asset_type: "Asset Type",
-    asset_manufacturer: "Manufacturer",
+    asset_manufacturer: "Asset Manufacturer",
     service_tag: "Service Tag",
     model: "Model",
     pn: "P/N",
@@ -184,7 +208,7 @@
     mouse: "Mouse",
     headphone: "Headphone",
     usb_extender: "USB Extender",
-    contains_pii: "Contains PII",
+    contains_pii: "Contains PII (Yes/No)",
     is_free: "Free?",
     asset: "Asset",
     asset_value: "Asset Value",
@@ -192,10 +216,36 @@
     asset_region: "Asset Region",
     sn: "S/N",
     configuration: "Configuration",
-    device_id: "Device ID",
+    device_id: "Device Id",
+    asset_id: "Asset Id",
+    mac_id: "MAC ID",
+    description: "Description",
+    cve_alert_setup: "CVE alert Setup",
+    billing_api: "Billing API",
     invoice_no: "Invoice No",
     user: "User",
   };
+
+  const COLUMN_LABEL_OVERRIDES_BY_TABLE = {
+    cloud_assets: {
+      contains_pii: "Contains PII data?",
+      date_added_updated: "Date Added/ Updated",
+    },
+    infodesk_applications: {
+      contains_pii: "Contains PII data?",
+      date_added_updated: "Date Added/ Updated",
+    },
+    third_party_software: {
+      contains_pii: "Contains PII data?",
+      date_added_updated: "Date Added/ Updated",
+    },
+  };
+
+  function columnLabel(tableKey, col) {
+    const o = COLUMN_LABEL_OVERRIDES_BY_TABLE[tableKey];
+    if (o && o[col]) return o[col];
+    return COLUMN_LABELS[col] || col;
+  }
 
   const TABLE_META = [
     { key: "laptops", label: "Laptop", color: "#185FA5" },
@@ -668,7 +718,7 @@
     const trh = document.createElement("tr");
     for (const c of cols) {
       const th = document.createElement("th");
-      th.textContent = COLUMN_LABELS[c] || c;
+      th.textContent = columnLabel(currentTable, c);
       trh.appendChild(th);
     }
     const thAct = document.createElement("th");
@@ -739,7 +789,7 @@
   }
 
   function fieldHtml(col, value) {
-    const label = COLUMN_LABELS[col] || col;
+    const label = columnLabel(currentTable, col);
     const id = `field-${col}`;
     if (col === "contains_pii" || col === "is_free") {
       const y = col === "contains_pii"
@@ -753,7 +803,12 @@
           <option value="No" ${noSel ? "selected" : ""}>No</option>
         </select></div>`;
     }
-    if (col === "asset_status" && currentTable === "laptops") {
+    if (
+      col === "asset_status" &&
+      (currentTable === "laptops" ||
+        currentTable === "desktops" ||
+        currentTable === "monitors")
+    ) {
       const opts = ASSET_STATUS_OPTIONS.map(
         (o) =>
           `<option value="${escapeHtml(o)}" ${String(value) === o ? "selected" : ""}>${escapeHtml(
