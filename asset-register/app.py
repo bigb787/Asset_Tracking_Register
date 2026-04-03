@@ -41,6 +41,7 @@ from database import (
     all_asset_register_keys_in_order,
     allocate_next_gatepass_no,
     asset_register_column_names,
+    ensure_register_extra_metadata,
     generate_create_register_table_sql,
     get_connection,
     get_extra_register_table_row,
@@ -348,6 +349,7 @@ def index():
 def api_tables_list():
     conn = get_connection()
     try:
+        ensure_register_extra_metadata(conn)
         result = []
         for t in TABLE_ORDER:
             cur = conn.execute(f"SELECT COUNT(*) AS c FROM {_qt(t)}")
@@ -362,18 +364,30 @@ def api_tables_list():
                 }
             )
         for r in list_extra_register_table_rows(conn):
-            cur = conn.execute(f"SELECT COUNT(*) AS c FROM {_qt(r['table_key'])}")
-            n = cur.fetchone()["c"]
-            result.append(
-                {
-                    "name": r["table_key"],
-                    "row_count": n,
-                    "label": r["display_label"],
-                    "columns": TABLE_COLUMNS[r["template_table"]],
-                    "custom": True,
-                    "template_table": r["template_table"],
-                }
-            )
+            try:
+                key = r["table_key"]
+                tpl = r["template_table"]
+                label = r["display_label"]
+                if not key or tpl not in TABLE_COLUMNS:
+                    app.logger.warning(
+                        "Skipping invalid custom register meta: key=%r template=%r", key, tpl
+                    )
+                    continue
+                cur = conn.execute(f"SELECT COUNT(*) AS c FROM {_qt(key)}")
+                n = cur.fetchone()["c"]
+                result.append(
+                    {
+                        "name": key,
+                        "row_count": n,
+                        "label": label,
+                        "columns": TABLE_COLUMNS[tpl],
+                        "custom": True,
+                        "template_table": tpl,
+                    }
+                )
+            except (sqlite3.OperationalError, TypeError, KeyError) as ex:
+                app.logger.warning("Skipping custom register table (metadata or DB issue): %s", ex)
+                continue
         gp = conn.execute("SELECT COUNT(*) AS c FROM gatepass").fetchone()["c"]
         result.append(
             {"name": "gatepass", "row_count": gp, "label": "Gatepass", "custom": False}
@@ -642,7 +656,12 @@ def _write_summary_sheet(ws, conn):
         if db_key == "gatepass":
             cnt = conn.execute("SELECT COUNT(*) AS c FROM gatepass").fetchone()["c"]
         else:
-            cnt = conn.execute(f"SELECT COUNT(*) AS c FROM {_qt(db_key)}").fetchone()["c"]
+            try:
+                cnt = conn.execute(f"SELECT COUNT(*) AS c FROM {_qt(db_key)}").fetchone()[
+                    "c"
+                ]
+            except sqlite3.OperationalError:
+                cnt = "—"
         lu = _last_updated_for_table(conn, db_key)
         ws.append([display_name, cnt, lu])
     _autofit_worksheet(ws)
@@ -683,10 +702,15 @@ def export_all():
             ws_sum = wb.create_sheet(sum_title, 0)
             _write_summary_sheet(ws_sum, conn)
             for db_key in all_asset_register_keys_in_order(conn):
-                base = _excel_sheet_title_for_register(conn, db_key) or db_key
-                title = _next_unique_workbook_sheet_name(used_names, base)
-                ws = wb.create_sheet(title)
-                _write_asset_sheet(ws, conn, db_key)
+                try:
+                    base = _excel_sheet_title_for_register(conn, db_key) or db_key
+                    title = _next_unique_workbook_sheet_name(used_names, base)
+                    ws = wb.create_sheet(title)
+                    _write_asset_sheet(ws, conn, db_key)
+                except Exception as sheet_ex:
+                    app.logger.warning(
+                        "Export skipped register %s: %s", db_key, sheet_ex
+                    )
             gp_base = EXPORT_SHEET_TITLES["gatepass"]
             gp_title = _next_unique_workbook_sheet_name(used_names, gp_base)
             ws_g = wb.create_sheet(gp_title)

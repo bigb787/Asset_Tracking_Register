@@ -580,6 +580,11 @@ def _ensure_register_extra_tables(conn):
     conn.executescript(REGISTER_EXTRA_TABLES_DDL)
 
 
+def ensure_register_extra_metadata(conn):
+    """Idempotent. Safe to call before any query against register_extra_tables."""
+    _ensure_register_extra_tables(conn)
+
+
 def list_extra_register_table_rows(conn):
     return conn.execute(
         "SELECT table_key, display_label, excel_sheet_title, template_table, sort_order "
