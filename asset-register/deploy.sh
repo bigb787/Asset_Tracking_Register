@@ -8,6 +8,18 @@ REPO_ROOT="$(cd "$APP_DIR/.." && pwd)"
 PORT="${ASSET_REGISTER_PORT:-3000}"
 DB_PATH="${DATABASE_PATH:-$REPO_ROOT/data/asset_register.sqlite}"
 
+export DEBIAN_FRONTEND=noninteractive
+# Old AMIs / minimal installs often lack venv support; without it `python3 -m venv` fails.
+if ! dpkg -s python3-venv >/dev/null 2>&1; then
+  apt-get update -qq
+  apt-get install -y -qq python3-venv
+fi
+
+# Legacy Node/PM2 stack may still own the app port; stop this app before Gunicorn binds.
+if command -v pm2 >/dev/null 2>&1; then
+  pm2 delete asset-register 2>/dev/null || true
+fi
+
 cd "$REPO_ROOT"
 git fetch --all
 current="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)"
@@ -48,5 +60,9 @@ EOF
   systemctl enable asset-register
 fi
 
-systemctl restart asset-register
+if ! systemctl restart asset-register; then
+  systemctl --no-pager --full status asset-register || true
+  journalctl -u asset-register -n 80 --no-pager || true
+  exit 1
+fi
 systemctl --no-pager --full status asset-register || true
