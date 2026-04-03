@@ -6,3 +6,7 @@ node_modules/
 
 # Editor
 .DS_Store
+
+# Secrets
+asset-register/.env
+.env
