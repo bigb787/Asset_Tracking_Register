@@ -19,10 +19,14 @@ const DEFAULT_ADMIN_PASSWORD = process.env.DEFAULT_ADMIN_PASSWORD || 'ChangeMe12
 const ADMIN_RESET_TOKEN = process.env.ADMIN_RESET_TOKEN || '';
 const upload = multer({ storage: multer.memoryStorage() });
 
-/** Temporary: disable API auth for UI testing. Set env ASSET_REGISTER_SKIP_AUTH=1 or start with node server.js --skip-auth. Remove for production. */
-const SKIP_AUTH =
+/** Open access by default (no login). Set ASSET_REGISTER_REQUIRE_AUTH=1 to require sign-in. Legacy: ASSET_REGISTER_SKIP_AUTH=1 or --skip-auth. */
+const REQUIRE_AUTH = ['1', 'true', 'yes'].includes(
+  String(process.env.ASSET_REGISTER_REQUIRE_AUTH || '').toLowerCase()
+);
+const LEGACY_FORCE_SKIP =
   process.argv.includes('--skip-auth') ||
   ['1', 'true', 'yes'].includes(String(process.env.ASSET_REGISTER_SKIP_AUTH || '').toLowerCase());
+const SKIP_AUTH = LEGACY_FORCE_SKIP || !REQUIRE_AUTH;
 
 function bypassAuthPayload() {
   return { sub: 0, username: 'dev', role: 'admin' };
@@ -1822,7 +1826,7 @@ app.listen(PORT, () => {
   ensureDefaultAuthUser();
   if (SKIP_AUTH) {
     console.warn(
-      '[auth] API authentication is DISABLED (ASSET_REGISTER_SKIP_AUTH or --skip-auth). Unset env and redeploy for production.'
+      '[auth] API authentication is DISABLED (open access). Set ASSET_REGISTER_REQUIRE_AUTH=1 to require login.'
     );
   }
   console.log(`Asset register listening at http://localhost:${PORT}`);

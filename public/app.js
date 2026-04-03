@@ -264,6 +264,7 @@ async function getSessionUser() {
     return null;
   }
   if (!data?.user) return null;
+  serverAuthDisabled = Boolean(data.authDisabled);
   return data.user;
 }
 
