@@ -143,6 +143,81 @@ body {
   padding: 1.25rem 1.5rem 2rem;
 }
 
+:root {
+  --border-radius-md: 8px;
+}
+
+.home-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.home-toolbar .view-intro {
+  margin: 0;
+}
+
+.btn-export-all {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 18px;
+  background: #1d9e75;
+  color: #fff;
+  border: none;
+  border-radius: var(--border-radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.btn-export-all:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.btn-export-all:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.register-toolbar-right {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-left: auto;
+}
+
+.btn-pdf {
+  background: #534ab7;
+  color: #fff;
+  border-color: #473e9e;
+}
+
+.btn-pdf:hover {
+  filter: brightness(1.06);
+}
+
+.btn-print {
+  background: #6b7280;
+  color: #fff;
+  border-color: #4b5563;
+}
+
+.btn-print:hover {
+  filter: brightness(1.06);
+}
+
+.btn-edit-primary {
+  background: #185fa5;
+  color: #fff;
+  border-color: #134a82;
+}
+
 .view-intro {
   margin: 0 0 1rem;
   color: #444;
@@ -421,6 +496,21 @@ body {
 .modal-form textarea {
   min-height: 4rem;
   resize: vertical;
+}
+
+.modal-form.gatepass-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem 1rem;
+}
+
+.modal-form.gatepass-grid .field-full {
+  grid-column: 1 / -1;
+}
+
+.modal-form .field-readonly input {
+  background: #f3f4f6;
+  color: #6b7280;
 }
 
 .modal-footer {

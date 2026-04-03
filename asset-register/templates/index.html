@@ -20,7 +20,14 @@
   </header>
   <main class="site-main">
     <section id="view-home" class="view">
-      <p class="view-intro">Choose a table to open its register.</p>
+      <div class="home-toolbar">
+        <p class="view-intro">Choose a table to open its register.</p>
+        <div class="home-toolbar-actions">
+          <button type="button" id="exportAllBtn" class="btn-export-all" aria-label="Export all tables to Excel">
+            Export All Tables
+          </button>
+        </div>
+      </div>
       <ul id="table-list" class="table-picker" aria-label="Tables"></ul>
     </section>
 
@@ -34,6 +41,35 @@
         <table class="data-table" id="data-table">
           <thead id="data-thead"></thead>
           <tbody id="data-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="view-gatepass" class="view" hidden>
+      <div class="register-toolbar">
+        <button type="button" class="btn btn-ghost" id="btn-gatepass-back">← All tables</button>
+        <span class="breadcrumb">Gatepass register</span>
+        <div class="register-toolbar-right">
+          <button type="button" class="btn btn-ghost" id="btn-gatepass-export">Export to Excel</button>
+          <button type="button" class="btn btn-primary" id="btn-gatepass-add">New Gatepass</button>
+        </div>
+      </div>
+      <div class="table-scroll" role="region" aria-label="Gatepass records">
+        <table class="data-table" id="gatepass-table">
+          <thead>
+            <tr>
+              <th>Gatepass No</th>
+              <th>Date</th>
+              <th>Department</th>
+              <th>Requested By</th>
+              <th>Approved By</th>
+              <th>Purpose</th>
+              <th>Asset</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="gatepass-tbody"></tbody>
         </table>
       </div>
     </section>

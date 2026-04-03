@@ -180,6 +180,26 @@ TABLE_COLUMNS = {
     ],
 }
 
+GATEPASS_MUTABLE_FIELDS = frozenset(
+    {
+        "gatepass_date",
+        "department",
+        "requested_by",
+        "approved_by",
+        "purpose",
+        "asset_description",
+        "asset_serial_no",
+        "quantity",
+        "expected_return_date",
+        "actual_return_date",
+        "gate_out_time",
+        "gate_in_time",
+        "security_guard",
+        "remarks",
+        "status",
+    }
+)
+
 _MIGRATION_SQL = """
 DROP TABLE IF EXISTS assets;
 DROP TABLE IF EXISTS workspaces;
@@ -276,6 +296,28 @@ CREATE TABLE IF NOT EXISTS admin (
   contains_pii TEXT, date_added_updated TEXT,
   is_free INTEGER DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS gatepass (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  gatepass_no TEXT UNIQUE NOT NULL,
+  gatepass_date TEXT,
+  department TEXT,
+  requested_by TEXT,
+  approved_by TEXT,
+  purpose TEXT,
+  asset_description TEXT,
+  asset_serial_no TEXT,
+  quantity TEXT,
+  expected_return_date TEXT,
+  actual_return_date TEXT,
+  gate_out_time TEXT,
+  gate_in_time TEXT,
+  security_guard TEXT,
+  remarks TEXT,
+  status TEXT DEFAULT 'Open',
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 
@@ -287,7 +329,7 @@ def get_connection():
 
 
 def migrate():
-    """Create / refresh schema: drop legacy tables, create all 11 asset tables."""
+    """Create / refresh schema: legacy drops + 11 asset tables + gatepass."""
     conn = get_connection()
     try:
         conn.executescript(_MIGRATION_SQL)
