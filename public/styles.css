@@ -56,6 +56,16 @@ input:focus,select:focus,textarea:focus{border-color:#185FA5;box-shadow:0 0 0 3p
 
 /* App shell */
 .app{max-width:1200px;margin:0 auto;padding:20px;}
+.session-warning{
+  margin:0 0 12px;
+  padding:10px 14px;
+  font-size:13px;
+  line-height:1.45;
+  color:#92400e;
+  background:#fef3c7;
+  border:0.5px solid #f59e0b;
+  border-radius:var(--border-radius-md);
+}
 .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;gap:12px;}
 .page-title{font-size:18px;font-weight:600;}
 .page-sub{font-size:13px;color:var(--color-text-secondary);margin-top:2px;}

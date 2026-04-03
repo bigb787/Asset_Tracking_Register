@@ -508,14 +508,16 @@ function showLogin() {
     showHome();
     return;
   }
+  $('#session-warning')?.classList?.add('hidden');
   $('#login-view').classList.remove('hidden');
   $('#app-view').classList.add('hidden');
   $('#auth-user').textContent = '';
-  setLoginError('');
 }
 
 function showApp(user) {
   activeUser = user;
+  setLoginError('');
+  $('#session-warning')?.classList?.add('hidden');
   $('#login-view').classList.add('hidden');
   $('#app-view').classList.remove('hidden');
   const name = user && typeof user.username === 'string' ? user.username : 'user';
@@ -792,23 +794,27 @@ async function loadCurrentTable() {
 
 async function loadGatePasses() {
   if (currentTable.key !== 'laptops' && currentTable.key !== 'gatepasses') return;
-  const status = $('#gp-status-filter').value || 'all';
-  const laptopId = ($('#gp-laptop-filter').value || '').trim();
-  const outDateFrom = ($('#gp-out-date-from').value || '').trim();
-  const outDateTo = ($('#gp-out-date-to').value || '').trim();
+  const statusEl = $('#gp-status-filter');
+  const tbody = $('#gp-rows');
+  const exportLink = $('#gp-export-link');
+  const badgesEl = $('#gp-badges');
+  if (!statusEl || !tbody || !exportLink) return;
+  const status = statusEl.value || 'all';
+  const laptopId = ($('#gp-laptop-filter')?.value || '').trim();
+  const outDateFrom = ($('#gp-out-date-from')?.value || '').trim();
+  const outDateTo = ($('#gp-out-date-to')?.value || '').trim();
   const q = new URLSearchParams();
   q.set('status', status);
   if (currentGatepassSearch) q.set('search', currentGatepassSearch);
   if (laptopId) q.set('laptop_id', laptopId);
   if (outDateFrom) q.set('out_date_from', outDateFrom);
   if (outDateTo) q.set('out_date_to', outDateTo);
-  $('#gp-export-link').href = apiUrl(`/api/export/gatepasses.xlsx?${q.toString()}`);
+  exportLink.href = apiUrl(`/api/export/gatepasses.xlsx?${q.toString()}`);
   const rows = await fetchJSON(apiUrl(`/api/laptop-gatepasses?${q.toString()}`));
   if (!Array.isArray(rows)) {
     throw new Error('Server returned invalid data for gate passes (expected a list).');
   }
-  renderGatepassBadges(rows);
-  const tbody = $('#gp-rows');
+  if (badgesEl) renderGatepassBadges(rows);
   tbody.innerHTML = rows
     .map((g) => {
       const isEditing = editingGatepassId === g.id;
@@ -895,12 +901,14 @@ function renderGatepassBadges(rows) {
 }
 
 async function loadAudit() {
+  const listEl = $('#audit-list');
+  if (!listEl) return;
   const auditTable = currentTable.key === 'gatepasses' ? 'laptop_gatepasses' : currentTable.key;
   const entries = await fetchJSON(apiUrl(`/api/audit?limit=20&table=${encodeURIComponent(auditTable)}`));
   if (!Array.isArray(entries)) {
     throw new Error('Server returned invalid data for audit (expected a list).');
   }
-  $('#audit-list').innerHTML = entries.length
+  listEl.innerHTML = entries.length
     ? entries
         .map(
           (e) =>
@@ -914,8 +922,16 @@ async function loadAudit() {
 
 async function refresh() {
   await loadCurrentTable();
-  await loadGatePasses();
-  await loadAudit();
+  try {
+    await loadGatePasses();
+  } catch (e) {
+    console.error('[refresh gate passes]', e);
+  }
+  try {
+    await loadAudit();
+  } catch (e) {
+    console.error('[refresh audit]', e);
+  }
 }
 
 function readLoginForm() {
@@ -955,14 +971,17 @@ async function performLogin() {
       await refresh();
     } catch (refreshErr) {
       console.error('[login refresh]', refreshErr);
-      clearAuthToken();
-      showLogin();
       const rmsg =
         refreshErr && typeof refreshErr === 'object' && 'message' in refreshErr && refreshErr.message
           ? String(refreshErr.message)
           : String(refreshErr || 'Could not load data');
-      setLoginError(`Signed in, but ${rmsg}. Try again or check the browser Network tab for /api errors.`);
-      return;
+      const warn = document.getElementById('session-warning');
+      if (warn) {
+        warn.textContent = `Signed in, but some data did not load (${rmsg}). You can still pick a table below. If this persists, check the Network tab for failed /api requests.`;
+        warn.classList.remove('hidden');
+      } else {
+        alert(`Signed in, but refresh failed: ${rmsg}`);
+      }
     }
   } catch (err) {
     const msg =
@@ -997,6 +1016,7 @@ $('#logout-btn')?.addEventListener('click', async () => {
     /* ignore */
   }
   activeUser = null;
+  setLoginError('');
   showLogin();
 });
 
@@ -1319,8 +1339,17 @@ async function bootstrap() {
     }
     try {
       await refresh();
-    } catch (_e) {
-      showLogin();
+    } catch (refreshErr) {
+      console.error('[bootstrap refresh]', refreshErr);
+      const rmsg =
+        refreshErr && typeof refreshErr === 'object' && 'message' in refreshErr && refreshErr.message
+          ? String(refreshErr.message)
+          : String(refreshErr || 'unknown error');
+      const warn = document.getElementById('session-warning');
+      if (warn) {
+        warn.textContent = `Could not load register data (${rmsg}). You can still pick a table; check Network for /api errors or refresh the page.`;
+        warn.classList.remove('hidden');
+      }
     }
   } else {
     showLogin();
