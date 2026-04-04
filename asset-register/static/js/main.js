@@ -448,9 +448,14 @@
     list.innerHTML = '<li class="empty-state">Loading…</li>';
     try {
       const counts = await api("/api/tables");
-      list.innerHTML = "";
+      if (!Array.isArray(counts)) {
+        throw new Error("Invalid tables response from server.");
+      }
+      const byName = Object.fromEntries(counts.map((c) => [c.name, c]));
+
       for (const row of counts) {
         const key = row.name;
+        if (!key) continue;
         labelByTableName[key] = row.label || metaByKey[key]?.label || key;
         if (row.columns && row.columns.length && key !== "gatepass") {
           TABLE_COLUMNS[key] = row.columns;
@@ -460,8 +465,35 @@
         } else if (key !== "gatepass") {
           delete templateKeyByTable[key];
         }
-        const n = row.row_count ?? 0;
-        const label = labelByTableName[key];
+      }
+
+      const assetMeta = TABLE_META.filter((m) => m.key !== "gatepass");
+      const builtinKeySet = new Set(TABLE_META.map((m) => m.key));
+      const seenCustom = new Set();
+      const extraNames = [];
+      for (const r of counts) {
+        if (!r || !r.name) continue;
+        if (builtinKeySet.has(r.name)) continue;
+        if (seenCustom.has(r.name)) continue;
+        seenCustom.add(r.name);
+        extraNames.push(r.name);
+      }
+      const rowsToRender = [
+        ...assetMeta.map((m) => m.key),
+        ...extraNames,
+        "gatepass",
+      ];
+
+      list.innerHTML = "";
+      for (const key of rowsToRender) {
+        const row = byName[key];
+        const n = row?.row_count ?? 0;
+        const label =
+          labelByTableName[key] ||
+          row?.label ||
+          metaByKey[key]?.label ||
+          key;
+        labelByTableName[key] = label;
         const li = document.createElement("li");
         li.innerHTML = `
           <button type="button" data-table="${escapeHtml(key)}">
@@ -480,7 +512,35 @@
         });
       });
     } catch (e) {
-      list.innerHTML = `<li class="empty-state">${escapeHtml(e.message)}</li>`;
+      list.innerHTML = "";
+      const warn = document.createElement("li");
+      warn.className = "empty-state";
+      warn.textContent =
+        "Could not load row counts from the server. You can still open a table. " +
+        (e.message || "");
+      list.appendChild(warn);
+      const assetMeta = TABLE_META.filter((m) => m.key !== "gatepass");
+      for (const key of [...assetMeta.map((m) => m.key), "gatepass"]) {
+        const m = metaByKey[key];
+        const label = m ? m.label : key;
+        labelByTableName[key] = label;
+        const li = document.createElement("li");
+        li.innerHTML = `
+          <button type="button" data-table="${escapeHtml(key)}">
+            <span class="dot" style="background:${escapeHtml(tableDotColor(key))}"></span>
+            <span class="name">${escapeHtml(label)}</span>
+            <span class="count">—</span>
+            <span class="chev" aria-hidden="true">›</span>
+          </button>`;
+        list.appendChild(li);
+      }
+      list.querySelectorAll("button[data-table]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const k = btn.getAttribute("data-table");
+          if (k === "gatepass") openGatepassView();
+          else openRegister(k);
+        });
+      });
     }
   }
 
